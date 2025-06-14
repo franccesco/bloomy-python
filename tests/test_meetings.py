@@ -17,17 +17,15 @@ class TestMeetingOperations:
         mock_response.json.return_value = [
             {
                 "Id": 456,
+                "Type": "NameId",
+                "Key": "NameId_456",
                 "Name": "Weekly Team Meeting",
-                "StartDateUtc": "2024-01-01T10:00:00Z",
-                "CreateDate": "2024-01-01T10:00:00Z",
-                "OrganizationId": 1,
             },
             {
                 "Id": 789,
+                "Type": "NameId",
+                "Key": "NameId_789",
                 "Name": "Monthly Review",
-                "StartDateUtc": "2024-01-01T10:00:00Z",
-                "CreateDate": "2024-01-01T10:00:00Z",
-                "OrganizationId": 1,
             },
         ]
         mock_http_client.get.return_value = mock_response
@@ -162,10 +160,9 @@ class TestMeetingOperations:
         list_response.json.return_value = [
             {
                 "Id": 789,
+                "Type": "NameId",
+                "Key": "NameId_789",
                 "Name": "Team Meeting",
-                "StartDateUtc": "2024-01-01T10:00:00Z",
-                "CreateDate": "2024-01-01T10:00:00Z",
-                "OrganizationId": 1,
             }
         ]
 

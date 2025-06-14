@@ -74,6 +74,15 @@ class MeetingAttendee(BloomyBaseModel):
     image_url: str = Field(alias="ImageUrl")
 
 
+class MeetingListItem(BloomyBaseModel):
+    """Model for meeting list item (simplified response)."""
+
+    id: int = Field(alias="Id")
+    type: str = Field(alias="Type")
+    key: str = Field(alias="Key")
+    name: str = Field(alias="Name")
+
+
 class Meeting(BloomyBaseModel):
     """Model for meeting."""
 
@@ -89,9 +98,9 @@ class MeetingDetails(BloomyBaseModel):
 
     id: int
     name: str
-    start_date_utc: datetime
-    created_date: datetime
-    organization_id: int
+    start_date_utc: datetime | None = None
+    created_date: datetime | None = None
+    organization_id: int | None = None
     attendees: list[MeetingAttendee] | None = None
     issues: list[Issue] | None = None
     todos: list[Todo] | None = None
@@ -105,12 +114,13 @@ class Todo(BloomyBaseModel):
     name: str = Field(alias="Name")
     details_url: str | None = Field(alias="DetailsUrl", default=None)
     due_date: datetime | None = Field(alias="DueDate", default=None)
-    complete_date: datetime | None = Field(alias="CompleteDate", default=None)
-    create_date: datetime = Field(alias="CreateDate")
-    meeting_id: int | None = Field(alias="MeetingId", default=None)
-    meeting_name: str | None = Field(alias="MeetingName", default=None)
+    complete_date: datetime | None = Field(alias="CompleteTime", default=None)
+    create_date: datetime | None = Field(alias="CreateTime", default=None)
+    meeting_id: int | None = Field(alias="OriginId", default=None)
+    meeting_name: str | None = Field(alias="Origin", default=None)
+    complete: bool = Field(alias="Complete", default=False)
 
-    @field_validator("due_date", "complete_date", mode="before")
+    @field_validator("due_date", "complete_date", "create_date", mode="before")
     @classmethod
     def parse_optional_datetime(cls, v: Any) -> datetime | None:
         """Parse optional datetime fields."""
@@ -218,7 +228,7 @@ class GoalInfo(BloomyBaseModel):
     user_name: str
     title: str
     created_at: str
-    due_date: str
+    due_date: str | None
     status: str
     meeting_id: int | None = None
     meeting_title: str | None = None
@@ -230,7 +240,7 @@ class ArchivedGoalInfo(BloomyBaseModel):
     id: int
     title: str
     created_at: str
-    due_date: str
+    due_date: str | None
     status: str
 
 

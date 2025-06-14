@@ -58,19 +58,7 @@ class TodoOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return [
-            Todo(
-                Id=todo["Id"],
-                Name=todo["Name"],
-                DetailsUrl=todo["DetailsUrl"],
-                DueDate=todo["DueDate"],
-                CompleteDate=todo["CompleteTime"] if todo["Complete"] else None,
-                CreateDate=todo["CreateTime"],
-                MeetingId=meeting_id,
-                MeetingName=None,
-            )
-            for todo in data
-        ]
+        return [Todo.model_validate(todo) for todo in data]
 
     def create(
         self,
@@ -117,16 +105,20 @@ class TodoOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return Todo(
-            Id=data["Id"],
-            Name=data["Name"],
-            DetailsUrl=data["DetailsUrl"],
-            DueDate=data["DueDate"],
-            CompleteDate=None,
-            CreateDate=datetime.now(),
-            MeetingId=meeting_id,
-            MeetingName=None,
-        )
+        # Add default values for fields that might be missing in create response
+        todo_data = {
+            "Id": data["Id"],
+            "Name": data["Name"],
+            "DetailsUrl": data.get("DetailsUrl"),
+            "DueDate": data.get("DueDate"),
+            "CompleteTime": None,
+            "CreateTime": datetime.now().isoformat(),
+            "OriginId": meeting_id,
+            "Origin": None,
+            "Complete": False,
+        }
+
+        return Todo.model_validate(todo_data)
 
     def complete(self, todo_id: int) -> bool:
         """Mark a todo as complete.
@@ -191,16 +183,20 @@ class TodoOperations(BaseOperations):
         if response.status_code != 200:
             raise RuntimeError(f"Failed to update todo. Status: {response.status_code}")
 
-        return Todo(
-            Id=todo_id,
-            Name=title or "",
-            DetailsUrl="",
-            DueDate=None if due_date is None else datetime.fromisoformat(due_date),
-            CompleteDate=None,
-            CreateDate=datetime.now(),
-            MeetingId=None,
-            MeetingName=None,
-        )
+        # Construct todo data for validation
+        todo_data = {
+            "Id": todo_id,
+            "Name": title or "",
+            "DetailsUrl": "",
+            "DueDate": due_date,
+            "CompleteTime": None,
+            "CreateTime": datetime.now().isoformat(),
+            "OriginId": None,
+            "Origin": None,
+            "Complete": False,
+        }
+
+        return Todo.model_validate(todo_data)
 
     def details(self, todo_id: int) -> Todo:
         """Retrieve the details of a specific todo item by its ID.
@@ -230,13 +226,4 @@ class TodoOperations(BaseOperations):
         response.raise_for_status()
         todo = response.json()
 
-        return Todo(
-            Id=todo["Id"],
-            Name=todo["Name"],
-            DetailsUrl=todo["DetailsUrl"],
-            DueDate=todo["DueDate"],
-            CompleteDate=todo["CompleteTime"] if todo["Complete"] else None,
-            CreateDate=todo["CreateTime"],
-            MeetingId=None,
-            MeetingName=None,
-        )
+        return Todo.model_validate(todo)

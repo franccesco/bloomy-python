@@ -19,13 +19,13 @@ from bloomy import Client
 client = Client(api_key="your-api-key")
 
 # Get current user
-user = client.user.me()
-print(f"Hello, {user['name']}!")
+user = client.user.details()
+print(f"Hello, {user.name}!")
 
 # List meetings
 meetings = client.meeting.list()
 for meeting in meetings:
-    print(f"Meeting: {meeting['name']} on {meeting['date']}")
+    print(f"Meeting: {meeting.name}")
 
 # Create a todo
 todo = client.todo.create(

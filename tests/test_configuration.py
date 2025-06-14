@@ -29,10 +29,11 @@ class TestConfiguration:
         """Test initialization with config file."""
         mock_yaml_data = {"version": 1, "api_key": "file-key"}
 
-        with patch("builtins.open", mock_open(read_data=yaml.dump(mock_yaml_data))):
-            with patch("pathlib.Path.exists", return_value=True):
-                config = Configuration()
-                assert config.api_key == "file-key"
+        with patch.dict(os.environ, {"BG_API_KEY": ""}):  # Clear env var
+            with patch("builtins.open", mock_open(read_data=yaml.dump(mock_yaml_data))):
+                with patch("pathlib.Path.exists", return_value=True):
+                    config = Configuration()
+                    assert config.api_key == "file-key"
 
     def test_init_priority_order(self):
         """Test API key priority: direct > env > file."""

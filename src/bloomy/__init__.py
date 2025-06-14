@@ -4,7 +4,7 @@ import importlib.metadata
 
 from .client import Client
 from .configuration import Configuration
-from .exceptions import BloomyError
+from .exceptions import APIError, BloomyError
 from .models import (
     ArchivedGoalInfo,
     CreatedGoalInfo,
@@ -25,6 +25,7 @@ from .models import (
     MeetingAttendee,
     MeetingDetails,
     MeetingInfo,
+    MeetingListItem,
     OwnerDetails,
     Position,
     ScorecardItem,
@@ -43,6 +44,7 @@ except importlib.metadata.PackageNotFoundError:
 __all__ = [
     "Client",
     "Configuration",
+    "APIError",
     "BloomyError",
     "ArchivedGoalInfo",
     "CreatedGoalInfo",
@@ -63,6 +65,7 @@ __all__ = [
     "MeetingAttendee",
     "MeetingDetails",
     "MeetingInfo",
+    "MeetingListItem",
     "OwnerDetails",
     "Position",
     "ScorecardItem",

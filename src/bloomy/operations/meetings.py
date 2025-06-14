@@ -7,9 +7,9 @@ from typing import Any
 
 from ..models import (
     Issue,
-    Meeting,
     MeetingAttendee,
     MeetingDetails,
+    MeetingListItem,
     ScorecardMetric,
     Todo,
 )
@@ -24,19 +24,19 @@ class MeetingOperations(BaseOperations):
         `client.meeting.method`
     """
 
-    def list(self, user_id: int | None = None) -> builtins.list[Meeting]:
+    def list(self, user_id: int | None = None) -> builtins.list[MeetingListItem]:
         """List all meetings for a specific user.
 
         Args:
             user_id: The ID of the user (default is the initialized user ID)
 
         Returns:
-            A list of Meeting model instances
+            A list of MeetingListItem model instances
 
         Example:
             ```python
             client.meeting.list()
-            # Returns: [Meeting(id=123, name="Team Meeting", ...), ...]
+            # Returns: [MeetingListItem(id=123, name="Team Meeting", ...), ...]
             ```
         """
         if user_id is None:
@@ -46,7 +46,7 @@ class MeetingOperations(BaseOperations):
         response.raise_for_status()
         data: Any = response.json()
 
-        return [Meeting.model_validate(meeting) for meeting in data]
+        return [MeetingListItem.model_validate(meeting) for meeting in data]
 
     def attendees(self, meeting_id: int) -> builtins.list[MeetingAttendee]:
         """List all attendees for a specific meeting.
@@ -145,19 +145,7 @@ class MeetingOperations(BaseOperations):
         response.raise_for_status()
         data: Any = response.json()
 
-        return [
-            Todo(
-                Id=todo["Id"],
-                Name=todo["Name"],
-                DueDate=todo["DueDate"],
-                DetailsUrl=todo["DetailsUrl"],
-                CompleteDate=todo["CompleteTime"] if todo["Complete"] else None,
-                CreateDate=todo["CreateTime"],
-                MeetingId=meeting_id,
-                MeetingName=None,
-            )
-            for todo in data
-        ]
+        return [Todo.model_validate(todo) for todo in data]
 
     def metrics(self, meeting_id: int) -> builtins.list[ScorecardMetric]:
         """List all metrics for a specific meeting.
@@ -245,9 +233,9 @@ class MeetingOperations(BaseOperations):
         return MeetingDetails(
             id=meeting.id,
             name=meeting.name,
-            start_date_utc=meeting.start_date_utc,
-            created_date=meeting.created_date,
-            organization_id=meeting.organization_id,
+            start_date_utc=getattr(meeting, "start_date_utc", None),
+            created_date=getattr(meeting, "created_date", None),
+            organization_id=getattr(meeting, "organization_id", None),
             attendees=self.attendees(meeting_id),
             issues=self.issues(meeting_id, include_closed=include_closed),
             todos=self.todos(meeting_id, include_closed=include_closed),

@@ -27,7 +27,7 @@ client = Client(api_key="your-api-key-here")
 Set the environment variable:
 
 ```bash
-export BLOOMY_API_KEY="your-api-key-here"
+export BG_API_KEY="your-api-key-here"
 ```
 
 Then initialize without parameters:
@@ -47,9 +47,10 @@ from bloomy import Configuration
 
 # Save credentials
 config = Configuration()
-config.configure(
+config.configure_api_key(
     username="your-email@example.com",
-    password="your-password"
+    password="your-password",
+    store_key=True
 )
 
 # Now you can use the client without any parameters
@@ -68,14 +69,14 @@ from bloomy import Client
 client = Client(api_key="your-api-key")
 
 # Get current user
-me = client.user.me()
-print(f"Logged in as: {me['name']} ({me['email']})")
+me = client.user.details()
+print(f"Logged in as: {me.name}")
 
 # List your meetings
 meetings = client.meeting.list()
 print(f"\nYou have {len(meetings)} meetings:")
 for meeting in meetings[:5]:  # Show first 5
-    print(f"  - {meeting['name']}")
+    print(f"  - {meeting.name}")
 ```
 
 ## Step 4: Explore Common Operations
@@ -85,7 +86,7 @@ for meeting in meetings[:5]:  # Show first 5
 ```python
 # List your todos
 todos = client.todo.list()
-open_todos = [t for t in todos if not t['complete']]
+open_todos = [t for t in todos if not t.complete]
 print(f"You have {len(open_todos)} open todos")
 
 # Create a new todo
@@ -94,7 +95,7 @@ new_todo = client.todo.create(
     due_date="2024-12-31",
     notes="Review all Q4 metrics and prepare summary"
 )
-print(f"Created todo: {new_todo['title']} (ID: {new_todo['id']})")
+print(f"Created todo: {new_todo.title} (ID: {new_todo.id})")
 ```
 
 ### Working with Goals (Rocks)
@@ -103,7 +104,7 @@ print(f"Created todo: {new_todo['title']} (ID: {new_todo['id']})")
 # List your active goals
 goals = client.goal.list()
 for goal in goals:
-    print(f"Goal: {goal['title']} - {goal['status']}")
+    print(f"Goal: {goal.name} - {goal.status}")
 
 # Create a new goal
 new_goal = client.goal.create(
@@ -117,7 +118,7 @@ new_goal = client.goal.create(
 
 ```python
 # Get a specific meeting's details
-meeting_id = meetings[0]['id']
+meeting_id = meetings[0].id
 meeting = client.meeting.details(meeting_id)
 
 # Get meeting attendees
@@ -141,7 +142,7 @@ The client supports context managers for automatic resource cleanup:
 from bloomy import Client
 
 with Client(api_key="your-api-key") as client:
-    user = client.user.me()
+    user = client.user.details()
     meetings = client.meeting.list()
     # Client automatically closes when exiting the context
 ```
@@ -156,9 +157,9 @@ from bloomy import Client, BloomyError, APIError
 client = Client(api_key="your-api-key")
 
 try:
-    user = client.user.me()
+    user = client.user.details()
 except APIError as e:
-    print(f"API error: {e.message} (Status: {e.status_code})")
+    print(f"API error: {e} (Status: {e.status_code})")
 except BloomyError as e:
     print(f"SDK error: {e}")
 ```
