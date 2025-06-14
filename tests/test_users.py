@@ -19,9 +19,9 @@ class TestUserOperations:
 
         result = user_ops.details()
 
-        assert result["id"] == 123
-        assert result["name"] == "John Doe"
-        assert result["image_url"] == "https://example.com/avatar.jpg"
+        assert "id" in result and result["id"] == 123
+        assert "name" in result and result["name"] == "John Doe"
+        assert "image_url" in result and result["image_url"] == "https://example.com/avatar.jpg"
         assert "direct_reports" not in result
         assert "positions" not in result
 
@@ -64,7 +64,9 @@ class TestUserOperations:
             {"Group": {"Position": {"Id": 789, "Name": "Manager"}}}
         ]
 
-        mock_http_client.get.side_effect = [user_response, reports_response, positions_response]
+        mock_http_client.get.side_effect = [
+            user_response, reports_response, positions_response
+        ]
 
         user_ops = UserOperations(mock_http_client)
         result = user_ops.details(user_id=123, all=True)
@@ -135,7 +137,9 @@ class TestUserOperations:
         assert result[0]["name"] == "John Doe"
         assert result[0]["email"] == "john@example.com"
 
-        mock_http_client.get.assert_called_once_with("search/user", params={"term": "john"})
+        mock_http_client.get.assert_called_once_with(
+            "search/user", params={"term": "john"}
+        )
 
     def test_all_users(self, mock_http_client):
         """Test getting all users."""
