@@ -101,3 +101,7 @@ The Bloomy Python SDK is organized as a client-based architecture where all API 
 1. **Optional Parameters**: Many list operations accept either `user_id` or `meeting_id` but not both
 2. **Default User**: When `user_id` is not provided, operations default to the authenticated user
 3. **Include Flags**: Some operations have `include_closed` or similar flags to control filtering
+
+### Commit and PR Guidelines
+
+- Don't add a co-authoring message at the end of commits or PRs.
