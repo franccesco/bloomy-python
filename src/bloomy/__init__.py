@@ -1,5 +1,7 @@
 """Bloomy - Python SDK for Bloom Growth API."""
 
+import importlib.metadata
+
 from .client import Client
 from .configuration import Configuration
 from .exceptions import BloomyError
@@ -34,7 +36,10 @@ from .models import (
     UserSearchResult,
 )
 
-__version__ = "0.12.0"
+try:
+    __version__ = importlib.metadata.version("bloomy")
+except importlib.metadata.PackageNotFoundError:
+    __version__ = "unknown"
 __all__ = [
     "Client",
     "Configuration",
