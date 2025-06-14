@@ -1,5 +1,6 @@
 """Tests for the Scorecard operations."""
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -10,7 +11,7 @@ from bloomy.operations.scorecard import ScorecardOperations
 class TestScorecardOperations:
     """Test cases for ScorecardOperations class."""
 
-    def test_current_week(self, mock_http_client):
+    def test_current_week(self, mock_http_client: Mock) -> None:
         """Test getting current week."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -31,14 +32,18 @@ class TestScorecardOperations:
 
         mock_http_client.get.assert_called_once_with("weeks/current")
 
-    def test_list_user_scorecard(self, mock_http_client, sample_scorecard_data):
+    def test_list_user_scorecard(
+        self,
+        mock_http_client: Mock,
+        sample_scorecard_data: dict[str, Any],
+        mock_user_id: Mock,
+    ) -> None:
         """Test listing scorecard for a user."""
         mock_response = Mock()
         mock_response.json.return_value = sample_scorecard_data
         mock_http_client.get.return_value = mock_response
 
         scorecard_ops = ScorecardOperations(mock_http_client)
-        scorecard_ops._user_id = 123
 
         result = scorecard_ops.list()
 
@@ -50,7 +55,9 @@ class TestScorecardOperations:
 
         mock_http_client.get.assert_called_once_with("scorecard/user/123")
 
-    def test_list_meeting_scorecard(self, mock_http_client, sample_scorecard_data):
+    def test_list_meeting_scorecard(
+        self, mock_http_client: Mock, sample_scorecard_data: dict[str, Any]
+    ) -> None:
         """Test listing scorecard for a meeting."""
         mock_response = Mock()
         mock_response.json.return_value = sample_scorecard_data
@@ -62,7 +69,7 @@ class TestScorecardOperations:
         assert len(result) == 1
         mock_http_client.get.assert_called_once_with("scorecard/meeting/456")
 
-    def test_list_both_params_error(self, mock_http_client):
+    def test_list_both_params_error(self, mock_http_client: Mock) -> None:
         """Test error when both user_id and meeting_id are provided."""
         scorecard_ops = ScorecardOperations(mock_http_client)
 
@@ -71,7 +78,9 @@ class TestScorecardOperations:
 
         assert "Please provide either" in str(exc_info.value)
 
-    def test_list_with_week_offset(self, mock_http_client):
+    def test_list_with_week_offset(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
         """Test listing scorecard with week offset."""
         # Mock scorecard response
         scorecard_response = Mock()
@@ -114,7 +123,6 @@ class TestScorecardOperations:
         mock_http_client.get.side_effect = [scorecard_response, week_response]
 
         scorecard_ops = ScorecardOperations(mock_http_client)
-        scorecard_ops._user_id = 123
 
         result = scorecard_ops.list(week_offset=-1)
 
@@ -122,7 +130,9 @@ class TestScorecardOperations:
         assert len(result) == 1
         assert result[0].week_id == 24
 
-    def test_list_filter_empty_values(self, mock_http_client):
+    def test_list_filter_empty_values(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
         """Test filtering empty values from scorecard."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -154,7 +164,6 @@ class TestScorecardOperations:
         mock_http_client.get.return_value = mock_response
 
         scorecard_ops = ScorecardOperations(mock_http_client)
-        scorecard_ops._user_id = 123
 
         # Without show_empty
         result = scorecard_ops.list()
@@ -165,7 +174,7 @@ class TestScorecardOperations:
         result = scorecard_ops.list(show_empty=True)
         assert len(result) == 2
 
-    def test_score(self, mock_http_client):
+    def test_score(self, mock_http_client: Mock) -> None:
         """Test updating a score."""
         # Mock current week response
         week_response = Mock()
@@ -192,7 +201,7 @@ class TestScorecardOperations:
             "measurables/301/week/25", json={"value": 97.5}
         )
 
-    def test_score_with_week_offset(self, mock_http_client):
+    def test_score_with_week_offset(self, mock_http_client: Mock) -> None:
         """Test updating a score with week offset."""
         week_response = Mock()
         week_response.json.return_value = {

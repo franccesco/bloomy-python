@@ -1,5 +1,6 @@
 """Tests for the Meetings operations."""
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -10,7 +11,7 @@ from bloomy.operations.meetings import MeetingOperations
 class TestMeetingOperations:
     """Test cases for MeetingOperations class."""
 
-    def test_list_meetings(self, mock_http_client):
+    def test_list_meetings(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
         """Test listing meetings."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -32,7 +33,6 @@ class TestMeetingOperations:
         mock_http_client.get.return_value = mock_response
 
         meeting_ops = MeetingOperations(mock_http_client)
-        meeting_ops._user_id = 123
 
         result = meeting_ops.list()
 
@@ -43,7 +43,7 @@ class TestMeetingOperations:
 
         mock_http_client.get.assert_called_once_with("L10/123/list")
 
-    def test_attendees(self, mock_http_client):
+    def test_attendees(self, mock_http_client: Mock) -> None:
         """Test getting meeting attendees."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -65,7 +65,7 @@ class TestMeetingOperations:
 
         mock_http_client.get.assert_called_once_with("L10/789/attendees")
 
-    def test_issues(self, mock_http_client):
+    def test_issues(self, mock_http_client: Mock) -> None:
         """Test getting meeting issues."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -94,7 +94,9 @@ class TestMeetingOperations:
             "L10/789/issues", params={"include_resolved": False}
         )
 
-    def test_todos(self, mock_http_client, sample_todo_data):
+    def test_todos(
+        self, mock_http_client: Mock, sample_todo_data: dict[str, Any]
+    ) -> None:
         """Test getting meeting todos."""
         mock_response = Mock()
         mock_response.json.return_value = [sample_todo_data]
@@ -112,7 +114,7 @@ class TestMeetingOperations:
             "L10/456/todos", params={"INCLUDE_CLOSED": True}
         )
 
-    def test_metrics(self, mock_http_client):
+    def test_metrics(self, mock_http_client: Mock) -> None:
         """Test getting meeting metrics."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -142,7 +144,7 @@ class TestMeetingOperations:
 
         mock_http_client.get.assert_called_once_with("L10/789/measurables")
 
-    def test_metrics_not_list(self, mock_http_client):
+    def test_metrics_not_list(self, mock_http_client: Mock) -> None:
         """Test metrics when response is not a list."""
         mock_response = Mock()
         mock_response.json.return_value = None
@@ -153,7 +155,7 @@ class TestMeetingOperations:
 
         assert result == []
 
-    def test_details(self, mock_http_client):
+    def test_details(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
         """Test getting meeting details."""
         # Mock list response
         list_response = Mock()
@@ -189,7 +191,6 @@ class TestMeetingOperations:
         ]
 
         meeting_ops = MeetingOperations(mock_http_client)
-        meeting_ops._user_id = 123
 
         result = meeting_ops.details(meeting_id=789)
 
@@ -200,21 +201,22 @@ class TestMeetingOperations:
         assert result.todos is not None
         assert result.metrics is not None
 
-    def test_details_meeting_not_found(self, mock_http_client):
+    def test_details_meeting_not_found(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
         """Test getting details for non-existent meeting."""
         mock_response = Mock()
         mock_response.json.return_value = []
         mock_http_client.get.return_value = mock_response
 
         meeting_ops = MeetingOperations(mock_http_client)
-        meeting_ops._user_id = 123
 
         with pytest.raises(ValueError) as exc_info:
             meeting_ops.details(meeting_id=999)
 
         assert "Meeting with ID 999 not found" in str(exc_info.value)
 
-    def test_create_meeting(self, mock_http_client):
+    def test_create_meeting(self, mock_http_client: Mock) -> None:
         """Test creating a meeting."""
         mock_response = Mock()
         mock_response.json.return_value = {"meetingId": 999}
@@ -237,7 +239,7 @@ class TestMeetingOperations:
         # Check attendee calls
         assert mock_http_client.post.call_count == 3  # 1 create + 2 attendees
 
-    def test_delete_meeting(self, mock_http_client):
+    def test_delete_meeting(self, mock_http_client: Mock) -> None:
         """Test deleting a meeting."""
         mock_response = Mock()
         mock_http_client.delete.return_value = mock_response

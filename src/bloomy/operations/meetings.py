@@ -165,27 +165,42 @@ class MeetingOperations(BaseOperations):
         """
         response = self._client.get(f"L10/{meeting_id}/measurables")
         response.raise_for_status()
-        data: Any = response.json()
+        raw_data = response.json()
 
-        if not isinstance(data, list):
+        if not isinstance(raw_data, list):
             return []
 
         metrics: list[ScorecardMetric] = []
-        for measurable in data:  # type: ignore[assignment]
-            if not measurable.get("Id") or not measurable.get("Name"):
+        # Type the list explicitly
+        data_list: list[Any] = raw_data  # type: ignore[assignment]
+        for item in data_list:
+            if not isinstance(item, dict):
                 continue
+
+            # Cast to Any dict to satisfy type checker
+            item_dict: dict[str, Any] = item  # type: ignore[assignment]
+            measurable_id = item_dict.get("Id")
+            measurable_name = item_dict.get("Name")
+
+            if not measurable_id or not measurable_name:
+                continue
+
+            owner_data = item_dict.get("Owner", {})
+            if not isinstance(owner_data, dict):
+                owner_data = {}
+            owner_dict: dict[str, Any] = owner_data  # type: ignore[assignment]
 
             metrics.append(
                 ScorecardMetric(
-                    Id=measurable["Id"],
-                    Title=measurable["Name"].strip(),
-                    Target=float(measurable.get("Target", 0)),
-                    Unit=str(measurable.get("Modifiers", "")),
+                    Id=int(measurable_id),
+                    Title=str(measurable_name).strip(),
+                    Target=float(item_dict.get("Target", 0)),
+                    Unit=str(item_dict.get("Modifiers", "")),
                     WeekNumber=0,  # Not provided in this endpoint
                     Value=None,
-                    MetricType=str(measurable.get("Direction", "")),
-                    AccountableUserId=measurable.get("Owner", {}).get("Id", 0),
-                    AccountableUserName=measurable.get("Owner", {}).get("Name"),
+                    MetricType=str(item_dict.get("Direction", "")),
+                    AccountableUserId=int(owner_dict.get("Id") or 0),
+                    AccountableUserName=str(owner_dict.get("Name") or ""),
                     IsInverse=False,
                 )
             )

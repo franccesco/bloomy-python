@@ -1,5 +1,6 @@
 """Tests for the Headlines operations."""
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -10,7 +11,7 @@ from bloomy.operations.headlines import HeadlineOperations
 class TestHeadlineOperations:
     """Test cases for HeadlineOperations class."""
 
-    def test_create(self, mock_http_client):
+    def test_create(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
         """Test creating a headline."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -22,7 +23,6 @@ class TestHeadlineOperations:
         mock_http_client.post.return_value = mock_response
 
         headline_ops = HeadlineOperations(mock_http_client)
-        headline_ops._user_id = 123
 
         result = headline_ops.create(
             meeting_id=456,
@@ -45,7 +45,9 @@ class TestHeadlineOperations:
             },
         )
 
-    def test_create_default_owner(self, mock_http_client):
+    def test_create_default_owner(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
         """Test creating a headline with default owner."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -57,7 +59,6 @@ class TestHeadlineOperations:
         mock_http_client.post.return_value = mock_response
 
         headline_ops = HeadlineOperations(mock_http_client)
-        headline_ops._user_id = 123
 
         result = headline_ops.create(meeting_id=456, title="Product launch successful")
 
@@ -68,7 +69,7 @@ class TestHeadlineOperations:
             json={"title": "Product launch successful", "ownerId": 123},
         )
 
-    def test_update(self, mock_http_client):
+    def test_update(self, mock_http_client: Mock) -> None:
         """Test updating a headline."""
         mock_response = Mock()
         mock_response.json.return_value = {"Id": 501, "Name": "Updated headline"}
@@ -83,7 +84,9 @@ class TestHeadlineOperations:
             "headline/501", json={"title": "Updated headline"}
         )
 
-    def test_details(self, mock_http_client, sample_headline_data):
+    def test_details(
+        self, mock_http_client: Mock, sample_headline_data: dict[str, Any]
+    ) -> None:
         """Test getting headline details."""
         mock_response = Mock()
         mock_response.json.return_value = sample_headline_data
@@ -102,7 +105,7 @@ class TestHeadlineOperations:
             "headline/501", params={"Include_Origin": "true"}
         )
 
-    def test_list_meeting_headlines(self, mock_http_client):
+    def test_list_meeting_headlines(self, mock_http_client: Mock) -> None:
         """Test listing headlines for a meeting."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -128,7 +131,9 @@ class TestHeadlineOperations:
 
         mock_http_client.get.assert_called_once_with("l10/456/headlines")
 
-    def test_list_user_headlines(self, mock_http_client):
+    def test_list_user_headlines(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
         """Test listing headlines for a user."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -146,14 +151,13 @@ class TestHeadlineOperations:
         mock_http_client.get.return_value = mock_response
 
         headline_ops = HeadlineOperations(mock_http_client)
-        headline_ops._user_id = 123
 
         result = headline_ops.list()
 
         assert len(result) == 1
         mock_http_client.get.assert_called_once_with("headline/users/123")
 
-    def test_list_both_params_error(self, mock_http_client):
+    def test_list_both_params_error(self, mock_http_client: Mock) -> None:
         """Test error when both user_id and meeting_id are provided."""
         headline_ops = HeadlineOperations(mock_http_client)
 
@@ -162,7 +166,7 @@ class TestHeadlineOperations:
 
         assert "Please provide either" in str(exc_info.value)
 
-    def test_delete(self, mock_http_client):
+    def test_delete(self, mock_http_client: Mock) -> None:
         """Test deleting a headline."""
         mock_response = Mock()
         mock_http_client.delete.return_value = mock_response

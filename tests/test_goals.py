@@ -1,5 +1,6 @@
 """Tests for the Goals operations."""
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -11,14 +12,18 @@ from bloomy.operations.goals import GoalOperations
 class TestGoalOperations:
     """Test cases for GoalOperations class."""
 
-    def test_list_goals(self, mock_http_client, sample_goal_data):
+    def test_list_goals(
+        self,
+        mock_http_client: Mock,
+        sample_goal_data: dict[str, Any],
+        mock_user_id: Mock,
+    ) -> None:
         """Test listing goals."""
         mock_response = Mock()
         mock_response.json.return_value = [sample_goal_data]
         mock_http_client.get.return_value = mock_response
 
         goal_ops = GoalOperations(mock_http_client)
-        goal_ops._user_id = 123
 
         result = goal_ops.list()
 
@@ -32,7 +37,12 @@ class TestGoalOperations:
             "rocks/user/123", params={"include_origin": True}
         )
 
-    def test_list_goals_with_archived(self, mock_http_client, sample_goal_data):
+    def test_list_goals_with_archived(
+        self,
+        mock_http_client: Mock,
+        sample_goal_data: dict[str, Any],
+        mock_user_id: Mock,
+    ) -> None:
         """Test listing goals with archived."""
         # Mock active goals response
         active_response = Mock()
@@ -53,7 +63,6 @@ class TestGoalOperations:
         mock_http_client.get.side_effect = [active_response, archived_response]
 
         goal_ops = GoalOperations(mock_http_client)
-        goal_ops._user_id = 123
 
         result = goal_ops.list(archived=True)
 
@@ -62,7 +71,7 @@ class TestGoalOperations:
         assert len(result.active) == 1
         assert len(result.archived) == 1
 
-    def test_create_goal(self, mock_http_client):
+    def test_create_goal(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
         """Test creating a goal."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -76,7 +85,6 @@ class TestGoalOperations:
         mock_http_client.post.return_value = mock_response
 
         goal_ops = GoalOperations(mock_http_client)
-        goal_ops._user_id = 123
 
         result = goal_ops.create(title="New Goal", meeting_id=789, user_id=456)
 
@@ -90,7 +98,7 @@ class TestGoalOperations:
             "L10/789/rocks", json={"title": "New Goal", "accountableUserId": 456}
         )
 
-    def test_delete_goal(self, mock_http_client):
+    def test_delete_goal(self, mock_http_client: Mock) -> None:
         """Test deleting a goal."""
         mock_response = Mock()
         mock_http_client.delete.return_value = mock_response
@@ -101,13 +109,12 @@ class TestGoalOperations:
         assert result is True
         mock_http_client.delete.assert_called_once_with("rocks/101")
 
-    def test_update_goal(self, mock_http_client):
+    def test_update_goal(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
         """Test updating a goal."""
         mock_response = Mock()
         mock_http_client.put.return_value = mock_response
 
         goal_ops = GoalOperations(mock_http_client)
-        goal_ops._user_id = 123
 
         result = goal_ops.update(goal_id=101, title="Updated Goal", status="complete")
 
@@ -121,17 +128,18 @@ class TestGoalOperations:
             },
         )
 
-    def test_update_goal_invalid_status(self, mock_http_client):
+    def test_update_goal_invalid_status(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
         """Test updating goal with invalid status."""
         goal_ops = GoalOperations(mock_http_client)
-        goal_ops._user_id = 123
 
         with pytest.raises(ValueError) as exc_info:
             goal_ops.update(goal_id=101, status="invalid")
 
         assert "Invalid status value" in str(exc_info.value)
 
-    def test_archive_goal(self, mock_http_client):
+    def test_archive_goal(self, mock_http_client: Mock) -> None:
         """Test archiving a goal."""
         mock_response = Mock()
         mock_http_client.put.return_value = mock_response
@@ -142,7 +150,7 @@ class TestGoalOperations:
         assert result is True
         mock_http_client.put.assert_called_once_with("rocks/101/archive")
 
-    def test_restore_goal(self, mock_http_client):
+    def test_restore_goal(self, mock_http_client: Mock) -> None:
         """Test restoring a goal."""
         mock_response = Mock()
         mock_http_client.put.return_value = mock_response

@@ -1,5 +1,6 @@
 """Tests for the Todos operations."""
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -10,14 +11,18 @@ from bloomy.operations.todos import TodoOperations
 class TestTodoOperations:
     """Test cases for TodoOperations class."""
 
-    def test_list_user_todos(self, mock_http_client, sample_todo_data):
+    def test_list_user_todos(
+        self,
+        mock_http_client: Mock,
+        sample_todo_data: dict[str, Any],
+        mock_user_id: Mock,
+    ) -> None:
         """Test listing todos for a user."""
         mock_response = Mock()
         mock_response.json.return_value = [sample_todo_data]
         mock_http_client.get.return_value = mock_response
 
         todo_ops = TodoOperations(mock_http_client)
-        todo_ops._user_id = 123
 
         result = todo_ops.list()
 
@@ -28,7 +33,9 @@ class TestTodoOperations:
 
         mock_http_client.get.assert_called_once_with("todo/user/123")
 
-    def test_list_meeting_todos(self, mock_http_client, sample_todo_data):
+    def test_list_meeting_todos(
+        self, mock_http_client: Mock, sample_todo_data: dict[str, Any]
+    ) -> None:
         """Test listing todos for a meeting."""
         mock_response = Mock()
         mock_response.json.return_value = [sample_todo_data]
@@ -40,7 +47,7 @@ class TestTodoOperations:
         assert len(result) == 1
         mock_http_client.get.assert_called_once_with("l10/456/todos")
 
-    def test_list_both_params_error(self, mock_http_client):
+    def test_list_both_params_error(self, mock_http_client: Mock) -> None:
         """Test error when both user_id and meeting_id are provided."""
         todo_ops = TodoOperations(mock_http_client)
 
@@ -49,7 +56,7 @@ class TestTodoOperations:
 
         assert "Please provide either" in str(exc_info.value)
 
-    def test_create_todo(self, mock_http_client):
+    def test_create_todo(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
         """Test creating a todo."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -61,7 +68,6 @@ class TestTodoOperations:
         mock_http_client.post.return_value = mock_response
 
         todo_ops = TodoOperations(mock_http_client)
-        todo_ops._user_id = 123
 
         result = todo_ops.create(
             title="New Todo",
@@ -83,7 +89,7 @@ class TestTodoOperations:
             },
         )
 
-    def test_complete_todo(self, mock_http_client):
+    def test_complete_todo(self, mock_http_client: Mock) -> None:
         """Test completing a todo."""
         mock_response = Mock()
         mock_response.json.return_value = {"success": True}
@@ -98,7 +104,7 @@ class TestTodoOperations:
             "/api/v1/todo/789/complete?status=true"
         )
 
-    def test_update_todo(self, mock_http_client):
+    def test_update_todo(self, mock_http_client: Mock) -> None:
         """Test updating a todo."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -123,7 +129,7 @@ class TestTodoOperations:
             "/api/v1/todo/789", json={"title": "Updated Todo", "dueDate": "2024-11-01"}
         )
 
-    def test_update_todo_no_fields(self, mock_http_client):
+    def test_update_todo_no_fields(self, mock_http_client: Mock) -> None:
         """Test updating todo with no fields raises error."""
         todo_ops = TodoOperations(mock_http_client)
 
@@ -132,7 +138,7 @@ class TestTodoOperations:
 
         assert "At least one field" in str(exc_info.value)
 
-    def test_details(self, mock_http_client):
+    def test_details(self, mock_http_client: Mock) -> None:
         """Test getting todo details."""
         mock_response = Mock()
         mock_response.json.return_value = {

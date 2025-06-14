@@ -12,9 +12,14 @@ class TestClient:
 
     def test_init_with_api_key(self):
         """Test client initialization with API key."""
-        with patch("bloomy.client.httpx.Client"):
+        with patch("bloomy.client.httpx.Client") as mock_httpx:
             client = Client(api_key="test-key")
-            assert client._api_key == "test-key"
+            assert isinstance(client, Client)
+            # Test that httpx.Client was called with correct headers
+            mock_httpx.assert_called_once()
+            call_kwargs = mock_httpx.call_args.kwargs
+            assert "Authorization" in call_kwargs["headers"]
+            assert call_kwargs["headers"]["Authorization"] == "Bearer test-key"
 
     def test_init_without_api_key(self):
         """Test client initialization without API key."""
@@ -23,9 +28,14 @@ class TestClient:
             mock_config.api_key = "config-key"
             mock_config_class.return_value = mock_config
 
-            with patch("bloomy.client.httpx.Client"):
+            with patch("bloomy.client.httpx.Client") as mock_httpx:
                 client = Client()
-                assert client._api_key == "config-key"
+                assert isinstance(client, Client)
+                # Test that configuration was used
+                mock_config_class.assert_called_once()
+                # Test that httpx.Client was called with config key
+                call_kwargs = mock_httpx.call_args.kwargs
+                assert call_kwargs["headers"]["Authorization"] == "Bearer config-key"
 
     def test_init_no_api_key_found(self):
         """Test client initialization with no API key available."""
@@ -93,6 +103,9 @@ class TestClient:
 
     def test_base_url(self):
         """Test the base URL is set correctly."""
-        with patch("bloomy.client.httpx.Client"):
+        with patch("bloomy.client.httpx.Client") as mock_httpx:
             client = Client(api_key="test-key")
-            assert client._base_url == "https://app.bloomgrowth.com/api/v1"
+            assert isinstance(client, Client)
+            # Test that httpx.Client was called with correct base_url
+            call_kwargs = mock_httpx.call_args.kwargs
+            assert call_kwargs["base_url"] == "https://app.bloomgrowth.com/api/v1"

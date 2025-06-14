@@ -1,5 +1,6 @@
 """Tests for the Users operations."""
 
+from typing import Any
 from unittest.mock import Mock
 
 from bloomy.operations.users import UserOperations
@@ -8,14 +9,18 @@ from bloomy.operations.users import UserOperations
 class TestUserOperations:
     """Test cases for UserOperations class."""
 
-    def test_details_basic(self, mock_http_client, sample_user_data):
+    def test_details_basic(
+        self,
+        mock_http_client: Mock,
+        sample_user_data: dict[str, Any],
+        mock_user_id: Mock,
+    ) -> None:
         """Test getting basic user details."""
         mock_response = Mock()
         mock_response.json.return_value = sample_user_data
         mock_http_client.get.return_value = mock_response
 
         user_ops = UserOperations(mock_http_client)
-        user_ops._user_id = 123  # Mock the user ID
 
         result = user_ops.details()
 
@@ -27,7 +32,12 @@ class TestUserOperations:
 
         mock_http_client.get.assert_called_once_with("users/123")
 
-    def test_details_with_direct_reports(self, mock_http_client, sample_user_data):
+    def test_details_with_direct_reports(
+        self,
+        mock_http_client: Mock,
+        sample_user_data: dict[str, Any],
+        mock_user_id: Mock,
+    ) -> None:
         """Test getting user details with direct reports."""
         # Mock user details response
         user_response = Mock()
@@ -46,7 +56,6 @@ class TestUserOperations:
         mock_http_client.get.side_effect = [user_response, reports_response]
 
         user_ops = UserOperations(mock_http_client)
-        user_ops._user_id = 123
 
         result = user_ops.details(direct_reports=True)
 
@@ -54,7 +63,9 @@ class TestUserOperations:
         assert len(result.direct_reports) == 1
         assert result.direct_reports[0].id == 456
 
-    def test_details_with_all(self, mock_http_client, sample_user_data):
+    def test_details_with_all(
+        self, mock_http_client: Mock, sample_user_data: dict[str, Any]
+    ) -> None:
         """Test getting user details with all information."""
         # Mock responses
         user_response = Mock()
@@ -82,7 +93,7 @@ class TestUserOperations:
         assert len(result.positions) == 1
         assert result.positions[0].name == "Manager"
 
-    def test_direct_reports(self, mock_http_client):
+    def test_direct_reports(self, mock_http_client: Mock) -> None:
         """Test getting direct reports."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -109,7 +120,7 @@ class TestUserOperations:
 
         mock_http_client.get.assert_called_once_with("users/123/directreports")
 
-    def test_positions(self, mock_http_client):
+    def test_positions(self, mock_http_client: Mock) -> None:
         """Test getting user positions."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -128,7 +139,7 @@ class TestUserOperations:
 
         mock_http_client.get.assert_called_once_with("users/123/seats")
 
-    def test_search(self, mock_http_client):
+    def test_search(self, mock_http_client: Mock) -> None:
         """Test searching users."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -155,7 +166,7 @@ class TestUserOperations:
             "search/user", params={"term": "john"}
         )
 
-    def test_all_users(self, mock_http_client):
+    def test_all_users(self, mock_http_client: Mock) -> None:
         """Test getting all users."""
         mock_response = Mock()
         mock_response.json.return_value = [

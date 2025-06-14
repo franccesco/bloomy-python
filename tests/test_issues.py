@@ -1,5 +1,6 @@
 """Tests for the Issues operations."""
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -10,7 +11,9 @@ from bloomy.operations.issues import IssueOperations
 class TestIssueOperations:
     """Test cases for IssueOperations class."""
 
-    def test_details(self, mock_http_client, sample_issue_data):
+    def test_details(
+        self, mock_http_client: Mock, sample_issue_data: dict[str, Any]
+    ) -> None:
         """Test getting issue details."""
         mock_response = Mock()
         mock_response.json.return_value = sample_issue_data
@@ -27,7 +30,7 @@ class TestIssueOperations:
 
         mock_http_client.get.assert_called_once_with("issues/401")
 
-    def test_list_user_issues(self, mock_http_client):
+    def test_list_user_issues(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
         """Test listing issues for a user."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -43,7 +46,6 @@ class TestIssueOperations:
         mock_http_client.get.return_value = mock_response
 
         issue_ops = IssueOperations(mock_http_client)
-        issue_ops._user_id = 123
 
         result = issue_ops.list()
 
@@ -55,7 +57,7 @@ class TestIssueOperations:
 
         mock_http_client.get.assert_called_once_with("issues/users/123")
 
-    def test_list_meeting_issues(self, mock_http_client):
+    def test_list_meeting_issues(self, mock_http_client: Mock) -> None:
         """Test listing issues for a meeting."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -76,7 +78,7 @@ class TestIssueOperations:
         assert len(result) == 1
         mock_http_client.get.assert_called_once_with("l10/456/issues")
 
-    def test_list_both_params_error(self, mock_http_client):
+    def test_list_both_params_error(self, mock_http_client: Mock) -> None:
         """Test error when both user_id and meeting_id are provided."""
         issue_ops = IssueOperations(mock_http_client)
 
@@ -85,7 +87,7 @@ class TestIssueOperations:
 
         assert "Please provide either" in str(exc_info.value)
 
-    def test_solve(self, mock_http_client):
+    def test_solve(self, mock_http_client: Mock) -> None:
         """Test solving an issue."""
         mock_response = Mock()
         mock_http_client.post.return_value = mock_response
@@ -98,7 +100,7 @@ class TestIssueOperations:
             "issues/401/complete", json={"complete": True}
         )
 
-    def test_create(self, mock_http_client):
+    def test_create(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
         """Test creating an issue."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -112,7 +114,6 @@ class TestIssueOperations:
         mock_http_client.post.return_value = mock_response
 
         issue_ops = IssueOperations(mock_http_client)
-        issue_ops._user_id = 123
 
         result = issue_ops.create(
             meeting_id=456, title="New Issue", user_id=789, notes="Issue description"
@@ -133,7 +134,9 @@ class TestIssueOperations:
             },
         )
 
-    def test_create_default_user(self, mock_http_client):
+    def test_create_default_user(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
         """Test creating an issue with default user."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -147,7 +150,6 @@ class TestIssueOperations:
         mock_http_client.post.return_value = mock_response
 
         issue_ops = IssueOperations(mock_http_client)
-        issue_ops._user_id = 123
 
         result = issue_ops.create(meeting_id=456, title="New Issue")
 
