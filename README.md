@@ -1,128 +1,231 @@
-# Bloomy
+# Bloomy - Python SDK for Bloom Growth API
 
-[![Gem Version](https://badge.fury.io/rb/bloomy.svg)](https://badge.fury.io/rb/bloomy)[![RSpec Tests](https://github.com/franccesco/bloomy/actions/workflows/main.yml/badge.svg)](https://github.com/franccesco/bloomy/actions/workflows/main.yml) [![Deploy Docs](https://github.com/franccesco/bloomy/actions/workflows/deploy_docs.yml/badge.svg)](https://github.com/franccesco/bloomy/actions/workflows/deploy_docs.yml)
-
-Bloomy is an **_unofficial_** Ruby library for interacting with the Bloom Growth API. It provides convenient methods for getting user details, todos, rocks, meetings, measurables, and issues.
+A Python SDK for interacting with the Bloom Growth API, providing easy access to users, meetings, todos, goals, scorecards, issues, and headlines.
 
 ## Installation
 
-Add this line to your application's Gemfile:
-
-```sh
-bundle add bloomy
+```bash
+pip install bloomy
 ```
 
-Or install it to your system:
+## Quick Start
 
-```sh
-gem install bloomy
+```python
+from bloomy import Client
+
+# Initialize the client with your API key
+client = Client(api_key="your-api-key-here")
+
+# Or use environment variable BG_API_KEY
+client = Client()
+
+# Or configure API key with username and password
+from bloomy import Configuration
+
+config = Configuration()
+config.configure_api_key("username", "password", store_key=True)
+client = Client()
 ```
 
-## Get Started
+## Features
 
-You can find the [full docs here](https://franccesco.github.io/bloomy/) but here's a quick overview to get you started.
+### Users
 
-### Initialize the Configuration
+```python
+# Get current user details
+user = client.user.details()
 
-First, you need to initialize the configuration and set up the API key.
+# Get user with direct reports and positions
+user = client.user.details(user_id=123, all=True)
 
-```ruby
-require 'bloomy'
+# Search users
+results = client.user.search("john")
 
-config = Bloomy::Configuration.new
+# Get all users
+users = client.user.all()
 ```
 
-### Configure the API Key
+### Meetings
 
-You can configure the API key using your username and password. Optionally, you can store the API key locally under `~/.bloomy/config.yaml` for future use.
+```python
+# List meetings
+meetings = client.meeting.list()
 
-```ruby
-config.configure_api_key("your_username", "your_password", store_key: true)
+# Get meeting details
+meeting = client.meeting.details(meeting_id=123)
+
+# Create a meeting
+new_meeting = client.meeting.create(
+    title="Weekly Team Meeting",
+    attendees=[456, 789]
+)
+
+# Delete a meeting
+client.meeting.delete(meeting_id=123)
 ```
 
-You can also set an `BG_API_KEY` environment variable and it will be loaded automatically for you once you initialize a client. A configuration is useful if you plan to use a fixed API key for your operations. However, you can also pass an API key when initializing a client without doing any configuration.
+### Todos
 
-## Client Initialization
+```python
+# List todos for current user
+todos = client.todo.list()
 
-Once the configuration is set up, you can initialize the client. The client provides access to various features such as managing users, todos, rocks, meetings, measurables, and issues.
+# Create a todo
+new_todo = client.todo.create(
+    title="Complete project proposal",
+    meeting_id=123,
+    due_date="2024-12-31"
+)
 
-> [!NOTE]
-> Passing an API key is entirely optional and only useful if you plan to use different API keys to manage different organizations. This will bypass the regular configuration process.
+# Complete a todo
+client.todo.complete(todo_id=456)
 
-```ruby
-client = Bloomy::Client.new(api_key: "abc...")
+# Update a todo
+client.todo.update(
+    todo_id=456,
+    title="Updated title",
+    due_date="2024-12-25"
+)
 ```
 
-## Using Client Features
+### Goals (Rocks)
 
-### User Management
+```python
+# List goals
+goals = client.goal.list()
 
-To interact with user-related features:
+# Create a goal
+new_goal = client.goal.create(
+    title="Increase sales by 20%",
+    meeting_id=123,
+    user_id=456
+)
 
-```ruby
-# Fetch current user details
-current_user_details = client.user.details
+# Update goal status
+client.goal.update(goal_id=789, status="on")  # on, off, or complete
 
-# Search for users
-search_results = client.user.search("John Doe")
+# Archive a goal
+client.goal.archive(goal_id=789)
 ```
 
-### Meeting Management
+### Scorecard
 
-To interact with meeting-related features:
+```python
+# Get current week
+week = client.scorecard.current_week()
 
-```ruby
-# List all meetings for the current user
-meetings = client.meeting.list
+# List scorecard items
+scorecards = client.scorecard.list(meeting_id=123)
 
-# Get details of a specific meeting
-meeting_details = client.meeting.details(meeting_id)
+# Update a score
+client.scorecard.score(measurable_id=456, score=95.5)
 ```
 
-### Todo Management
+### Issues
 
-To interact with todo-related features:
+```python
+# List issues
+issues = client.issue.list()
 
-```ruby
-# List all todos for the current user
-todos = client.todo.list
+# Create an issue
+new_issue = client.issue.create(
+    meeting_id=123,
+    title="Server performance degradation"
+)
 
-# Create a new todo
-new_todo = client.todo.create(meeting_id: 1, title: "New Task", due_date: "2024-06-15")
+# Solve an issue
+client.issue.solve(issue_id=456)
 ```
 
-### Goal Management
+### Headlines
 
-To interact with goal-related features:
+```python
+# List headlines
+headlines = client.headline.list(meeting_id=123)
 
-```ruby
-# List all goals for the current user
-goals = client.goal.list
+# Create a headline
+new_headline = client.headline.create(
+    meeting_id=123,
+    title="Product launch successful",
+    notes="Exceeded targets by 15%"
+)
 
-# Create a new goal
-new_goal = client.goal.create(meeting_id: 1, title: "New Goal")
+# Update a headline
+client.headline.update(headline_id=456, title="Updated headline")
+
+# Delete a headline
+client.headline.delete(headline_id=456)
 ```
 
-### Scorecard Management
+## Configuration
 
-To interact with measurable-related features:
+The SDK supports multiple ways to provide your API key:
 
-```ruby
-# Get user scorecard
-user_scorecard = client.scorecard.list(user_id: 1)
+1. **Direct initialization**: Pass the API key when creating the client
+2. **Environment variable**: Set `BG_API_KEY` in your environment
+3. **Configuration file**: Store the API key in `~/.bloomy/config.yaml`
+4. **Dynamic configuration**: Use username/password to fetch and store the API key
 
-# Get a meeting scorecard
-meeting_scorecard = client.scorecard.list(meeting_id: 1)
+```python
+# Using configuration file
+config = Configuration()
+config.configure_api_key("username", "password", store_key=True)
 ```
 
-### Issue Management
+## Error Handling
 
-To interact with issue-related features:
+The SDK raises specific exceptions for different error scenarios:
 
-```ruby
-# Get details of a specific issue
-issue_details = client.issue.details(issue_id)
+```python
+from bloomy.exceptions import BloomyError, ConfigurationError, AuthenticationError, APIError
 
-# Create a new issue
-new_issue = client.issue.create(meeting_id: 1, title: "New Issue")
+try:
+    client.user.details()
+except AuthenticationError:
+    print("Invalid API key")
+except APIError as e:
+    print(f"API error: {e.message}, Status: {e.status_code}")
+except BloomyError as e:
+    print(f"General error: {e}")
 ```
+
+## Development
+
+This SDK uses:
+- **uv** for package management
+- **ruff** for formatting and linting
+- **pyright** for type checking
+- **pytest** for testing
+
+To set up the development environment:
+
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies
+uv sync --all-extras
+
+# Run tests
+uv run pytest
+
+# Format code
+uv run ruff format .
+
+# Run linting
+uv run ruff check . --fix
+
+# Type checking
+uv run pyright
+```
+
+## Requirements
+
+- Python 3.12+
+- httpx
+- pyyaml
+- pydantic
+
+## License
+
+This project is licensed under the MIT License.

@@ -1,0 +1,296 @@
+"""Goal operations for the Bloomy SDK."""
+
+from __future__ import annotations
+
+import builtins
+from typing import TYPE_CHECKING, TypedDict
+
+from ..utils.base_operations import BaseOperations
+
+if TYPE_CHECKING:
+    from typing import Any
+
+
+class GoalInfo(TypedDict):
+    """Type definition for goal information."""
+
+    id: int
+    user_id: int
+    user_name: str
+    title: str
+    created_at: str
+    due_date: str
+    status: str
+    meeting_id: int | None
+    meeting_title: str | None
+
+
+class ArchivedGoalInfo(TypedDict):
+    """Type definition for archived goal information."""
+
+    id: int
+    title: str
+    created_at: str
+    due_date: str
+    status: str
+
+
+class GoalListResponse(TypedDict):
+    """Type definition for goal list response with archived goals."""
+
+    active: list[GoalInfo]
+    archived: list[ArchivedGoalInfo]
+
+
+class CreatedGoalInfo(TypedDict):
+    """Type definition for created goal information."""
+
+    id: int
+    user_id: int
+    user_name: str
+    title: str
+    meeting_id: int
+    meeting_title: str
+    status: str
+    created_at: str
+
+
+class GoalOperations(BaseOperations):
+    """Class to handle all the operations related to goals (also known as "rocks").
+
+    Note:
+        This class is already initialized via the client and usable as
+        `client.goal.method`
+    """
+
+    def list(
+        self, user_id: int | None = None, archived: bool = False
+    ) -> builtins.list[GoalInfo] | GoalListResponse:
+        """List all goals for a specific user.
+
+        Args:
+            user_id: The ID of the user (default is the initialized user ID)
+            archived: Whether to include archived goals (default: False)
+
+        Returns:
+            Either:
+            - An array of goal dictionaries if archived is false
+            - A dictionary with :active and :archived arrays of goal dictionaries
+              if archived is true
+
+        Examples:
+            List active goals:
+            >>> client.goal.list()
+            [{"id": 1, "title": "Complete project", ...}]
+
+            List both active and archived goals:
+            >>> client.goal.list(archived=True)
+            {
+                "active": [{"id": 1, ...}],
+                "archived": [{"id": 2, ...}]
+            }
+        """
+        if user_id is None:
+            user_id = self.user_id
+
+        response = self._client.get(
+            f"rocks/user/{user_id}", params={"include_origin": True}
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        active_goals: list[GoalInfo] = []
+        for goal in data:
+            active_goals.append(
+                {
+                    "id": goal["Id"],
+                    "user_id": goal["Owner"]["Id"],
+                    "user_name": goal["Owner"]["Name"],
+                    "title": goal["Name"],
+                    "created_at": goal["CreateTime"],
+                    "due_date": goal["DueDate"],
+                    "status": "Completed" if goal.get("Complete") else "Incomplete",
+                    "meeting_id": goal["Origins"][0]["Id"]
+                    if goal.get("Origins")
+                    else None,
+                    "meeting_title": goal["Origins"][0]["Name"]
+                    if goal.get("Origins")
+                    else None,
+                }
+            )
+
+        if archived:
+            archived_goals = self._get_archived_goals(user_id)
+            return {"active": active_goals, "archived": archived_goals}
+
+        return active_goals
+
+    def create(
+        self, title: str, meeting_id: int, user_id: int | None = None
+    ) -> CreatedGoalInfo:
+        """Create a new goal.
+
+        Args:
+            title: The title of the new goal
+            meeting_id: The ID of the meeting associated with the goal
+            user_id: The ID of the user responsible for the goal (default:
+                initialized user ID)
+
+        Returns:
+            The newly created goal
+
+        Example:
+            >>> client.goal.create(title="New Goal", meeting_id=1)
+            {"goal_id": 1, "title": "New Goal", "meeting_id": 1, ...}
+        """
+        if user_id is None:
+            user_id = self.user_id
+
+        payload = {"title": title, "accountableUserId": user_id}
+        response = self._client.post(f"L10/{meeting_id}/rocks", json=payload)
+        response.raise_for_status()
+        data = response.json()
+
+        # Map completion status
+        completion_map = {2: "complete", 1: "on", 0: "off"}
+        status = completion_map.get(data.get("Completion", 0), "off")
+
+        return {
+            "id": data["Id"],
+            "user_id": user_id,
+            "user_name": data["Owner"]["Name"],
+            "title": title,
+            "meeting_id": meeting_id,
+            "meeting_title": data["Origins"][0]["Name"],
+            "status": status,
+            "created_at": data["CreateTime"],
+        }
+
+    def delete(self, goal_id: int) -> bool:
+        """Delete a goal.
+
+        Args:
+            goal_id: The ID of the goal to delete
+
+        Returns:
+            True if deletion was successful
+
+        Example:
+            >>> client.goal.delete(1)
+            True
+        """
+        response = self._client.delete(f"rocks/{goal_id}")
+        response.raise_for_status()
+        return True
+
+    def update(
+        self,
+        goal_id: int,
+        title: str | None = None,
+        accountable_user: int | None = None,
+        status: str | None = None,
+    ) -> bool:
+        """Update a goal.
+
+        Args:
+            goal_id: The ID of the goal to update
+            title: The new title of the goal
+            accountable_user: The ID of the user responsible for the goal
+                (default: initialized user ID)
+            status: The status value ('on', 'off', or 'complete')
+
+        Returns:
+            True if the update was successful
+
+        Raises:
+            ValueError: If an invalid status value is provided
+
+        Example:
+            >>> client.goal.update(goal_id=1, title="Updated Goal", status='on')
+            True
+        """
+        if accountable_user is None:
+            accountable_user = self.user_id
+
+        payload: dict[str, Any] = {"accountableUserId": accountable_user}
+
+        if title is not None:
+            payload["title"] = title
+
+        if status is not None:
+            valid_status = {"on": "OnTrack", "off": "AtRisk", "complete": "Complete"}
+            status_key = status.lower()
+            if status_key not in valid_status:
+                raise ValueError(
+                    "Invalid status value. Must be 'on', 'off', or 'complete'."
+                )
+            payload["completion"] = valid_status[status_key]
+
+        response = self._client.put(f"rocks/{goal_id}", json=payload)
+        response.raise_for_status()
+        return True
+
+    def archive(self, goal_id: int) -> bool:
+        """Archive a rock with the specified goal ID.
+
+        Args:
+            goal_id: The ID of the goal/rock to archive
+
+        Returns:
+            True if the archival was successful, False otherwise
+
+        Example:
+            >>> goals.archive(123)
+            True
+        """
+        response = self._client.put(f"rocks/{goal_id}/archive")
+        response.raise_for_status()
+        return True
+
+    def restore(self, goal_id: int) -> bool:
+        """Restore a previously archived goal identified by the provided goal ID.
+
+        Args:
+            goal_id: The unique identifier of the goal to restore
+
+        Returns:
+            True if the restore operation was successful, False otherwise
+
+        Example:
+            >>> goals.restore(123)
+            True
+        """
+        response = self._client.put(f"rocks/{goal_id}/restore")
+        response.raise_for_status()
+        return True
+
+    def _get_archived_goals(self, user_id: int | None = None) -> list[ArchivedGoalInfo]:
+        """Retrieve all archived goals for a specific user (private method).
+
+        Args:
+            user_id: The ID of the user (default is the initialized user ID)
+
+        Returns:
+            An array of dictionaries containing archived goal details
+
+        Example:
+            >>> goal._get_archived_goals()
+            [{"id": 1, "title": "Archived Goal", "created_at": "2024-06-10", ...}, ...]
+        """
+        if user_id is None:
+            user_id = self.user_id
+
+        response = self._client.get(f"archivedrocks/user/{user_id}")
+        response.raise_for_status()
+        data = response.json()
+
+        return [
+            {
+                "id": goal["Id"],
+                "title": goal["Name"],
+                "created_at": goal["CreateTime"],
+                "due_date": goal["DueDate"],
+                "status": "Complete" if goal.get("Complete") else "Incomplete",
+            }
+            for goal in data
+        ]

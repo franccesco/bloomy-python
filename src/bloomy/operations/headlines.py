@@ -1,0 +1,241 @@
+"""Headline operations for the Bloomy SDK."""
+
+from __future__ import annotations
+
+import builtins
+from typing import TYPE_CHECKING, TypedDict
+
+from ..utils.base_operations import BaseOperations
+
+if TYPE_CHECKING:
+    pass
+
+
+class OwnerDetails(TypedDict):
+    """Type definition for owner details."""
+
+    id: int
+    name: str | None
+
+
+class MeetingDetails(TypedDict):
+    """Type definition for meeting details."""
+
+    id: int
+    title: str
+
+
+class HeadlineInfo(TypedDict):
+    """Type definition for headline information."""
+
+    id: int
+    title: str
+    notes_url: str
+    owner_details: OwnerDetails
+
+
+class HeadlineDetails(TypedDict):
+    """Type definition for detailed headline information."""
+
+    id: int
+    title: str
+    notes_url: str
+    meeting_details: MeetingDetails
+    owner_details: OwnerDetails
+    archived: bool
+    created_at: str
+    closed_at: str | None
+
+
+class HeadlineListItem(TypedDict):
+    """Type definition for headline list items."""
+
+    id: int
+    title: str
+    meeting_details: MeetingDetails
+    owner_details: OwnerDetails
+    archived: bool
+    created_at: str
+    closed_at: str | None
+
+
+class HeadlineOperations(BaseOperations):
+    """Class to handle all operations related to headlines."""
+
+    def create(
+        self,
+        meeting_id: int,
+        title: str,
+        owner_id: int | None = None,
+        notes: str | None = None,
+    ) -> HeadlineInfo:
+        """Create a new headline.
+
+        Args:
+            meeting_id: The ID of the meeting
+            title: The title of the headline
+            owner_id: The ID of the headline owner (default: current user ID)
+            notes: Additional notes for the headline
+
+        Returns:
+            A dictionary containing id, title, owner_details, and notes_url
+
+        Raises:
+            httpx.HTTPStatusError: If the API request fails
+        """
+        if owner_id is None:
+            owner_id = self.user_id
+
+        payload = {"title": title, "ownerId": owner_id}
+        if notes is not None:
+            payload["notes"] = notes
+
+        response = self._client.post(f"L10/{meeting_id}/headlines", json=payload)
+        response.raise_for_status()
+        data = response.json()
+
+        return {
+            "id": data["Id"],
+            "title": data["Name"],
+            "owner_details": {"id": data["OwnerId"], "name": None},
+            "notes_url": data["DetailsUrl"],
+        }
+
+    def update(self, headline_id: int, title: str) -> bool:
+        """Update a headline.
+
+        Args:
+            headline_id: The ID of the headline to update
+            title: The new title of the headline
+
+        Returns:
+            True if update was successful
+
+        Raises:
+            httpx.HTTPStatusError: If the API request fails
+        """
+        payload = {"title": title}
+        response = self._client.put(f"headline/{headline_id}", json=payload)
+        response.raise_for_status()
+        return True
+
+    def details(self, headline_id: int) -> HeadlineDetails:
+        """Get headline details.
+
+        Args:
+            headline_id: The ID of the headline
+
+        Returns:
+            A dictionary containing id, title, notes_url, meeting_details,
+            owner_details, archived, created_at, and closed_at
+
+        Raises:
+            httpx.HTTPStatusError: If the API request fails
+        """
+        response = self._client.get(
+            f"headline/{headline_id}", params={"Include_Origin": "true"}
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        return {
+            "id": data["Id"],
+            "title": data["Name"],
+            "notes_url": data["DetailsUrl"],
+            "meeting_details": {
+                "id": data["OriginId"],
+                "title": data["Origin"],
+            },
+            "owner_details": {
+                "id": data["Owner"]["Id"],
+                "name": data["Owner"]["Name"],
+            },
+            "archived": data["Archived"],
+            "created_at": data["CreateTime"],
+            "closed_at": data["CloseTime"],
+        }
+
+    def list(
+        self, user_id: int | None = None, meeting_id: int | None = None
+    ) -> builtins.list[HeadlineListItem]:
+        """Get headlines for a user or a meeting.
+
+        Args:
+            user_id: The ID of the user (defaults to initialized user_id)
+            meeting_id: The ID of the meeting
+
+        Returns:
+            A list of headlines containing:
+            - id
+            - title
+            - meeting_details
+            - owner_details
+            - archived
+            - created_at
+            - closed_at
+
+        Raises:
+            ValueError: If both user_id and meeting_id are provided
+            httpx.HTTPStatusError: If the API request fails
+
+        Example:
+            >>> client.headline.list()
+            [
+                {
+                    "id": 1,
+                    "title": "Headline Title",
+                    "meeting_details": {"id": 1, "title": "Team Meeting"},
+                    "owner_details": {"id": 1, "name": "John Doe"},
+                    "archived": False,
+                    "created_at": "2023-01-01",
+                    "closed_at": None
+                }
+            ]
+        """
+        if user_id and meeting_id:
+            raise ValueError("Please provide either user_id or meeting_id, not both.")
+
+        if meeting_id:
+            response = self._client.get(f"l10/{meeting_id}/headlines")
+        else:
+            if user_id is None:
+                user_id = self.user_id
+            response = self._client.get(f"headline/users/{user_id}")
+
+        response.raise_for_status()
+        data = response.json()
+
+        return [
+            {
+                "id": headline["Id"],
+                "title": headline["Name"],
+                "meeting_details": {
+                    "id": headline["OriginId"],
+                    "title": headline["Origin"],
+                },
+                "owner_details": {
+                    "id": headline["Owner"]["Id"],
+                    "name": headline["Owner"]["Name"],
+                },
+                "archived": headline["Archived"],
+                "created_at": headline["CreateTime"],
+                "closed_at": headline["CloseTime"],
+            }
+            for headline in data
+        ]
+
+    def delete(self, headline_id: int) -> bool:
+        """Delete a headline.
+
+        Args:
+            headline_id: The ID of the headline to delete
+
+        Returns:
+            True if the deletion was successful
+
+        Raises:
+            httpx.HTTPStatusError: If the API request fails
+        """
+        response = self._client.delete(f"headline/{headline_id}")
+        response.raise_for_status()
+        return True
