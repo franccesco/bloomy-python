@@ -117,3 +117,8 @@ The Bloomy Python SDK is organized as a client-based architecture where all API 
 ### Commit and PR Guidelines
 
 - Don't add a co-authoring message at the end of commits or PRs.
+- Make sure to bump version according to semver before commiting
+
+### Key Development Principles
+
+- Always make sure documentation matches your code
