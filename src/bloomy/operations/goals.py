@@ -3,56 +3,13 @@
 from __future__ import annotations
 
 import builtins
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 
+from ..models import ArchivedGoalInfo, CreatedGoalInfo, GoalInfo, GoalListResponse
 from ..utils.base_operations import BaseOperations
 
 if TYPE_CHECKING:
     from typing import Any
-
-
-class GoalInfo(TypedDict):
-    """Type definition for goal information."""
-
-    id: int
-    user_id: int
-    user_name: str
-    title: str
-    created_at: str
-    due_date: str
-    status: str
-    meeting_id: int | None
-    meeting_title: str | None
-
-
-class ArchivedGoalInfo(TypedDict):
-    """Type definition for archived goal information."""
-
-    id: int
-    title: str
-    created_at: str
-    due_date: str
-    status: str
-
-
-class GoalListResponse(TypedDict):
-    """Type definition for goal list response with archived goals."""
-
-    active: list[GoalInfo]
-    archived: list[ArchivedGoalInfo]
-
-
-class CreatedGoalInfo(TypedDict):
-    """Type definition for created goal information."""
-
-    id: int
-    user_id: int
-    user_name: str
-    title: str
-    meeting_id: int
-    meeting_title: str
-    status: str
-    created_at: str
 
 
 class GoalOperations(BaseOperations):
@@ -102,26 +59,26 @@ class GoalOperations(BaseOperations):
         active_goals: list[GoalInfo] = []
         for goal in data:
             active_goals.append(
-                {
-                    "id": goal["Id"],
-                    "user_id": goal["Owner"]["Id"],
-                    "user_name": goal["Owner"]["Name"],
-                    "title": goal["Name"],
-                    "created_at": goal["CreateTime"],
-                    "due_date": goal["DueDate"],
-                    "status": "Completed" if goal.get("Complete") else "Incomplete",
-                    "meeting_id": goal["Origins"][0]["Id"]
+                GoalInfo(
+                    id=goal["Id"],
+                    user_id=goal["Owner"]["Id"],
+                    user_name=goal["Owner"]["Name"],
+                    title=goal["Name"],
+                    created_at=goal["CreateTime"],
+                    due_date=goal["DueDate"],
+                    status="Completed" if goal.get("Complete") else "Incomplete",
+                    meeting_id=goal["Origins"][0]["Id"]
                     if goal.get("Origins")
                     else None,
-                    "meeting_title": goal["Origins"][0]["Name"]
+                    meeting_title=goal["Origins"][0]["Name"]
                     if goal.get("Origins")
                     else None,
-                }
+                )
             )
 
         if archived:
             archived_goals = self._get_archived_goals(user_id)
-            return {"active": active_goals, "archived": archived_goals}
+            return GoalListResponse(active=active_goals, archived=archived_goals)
 
         return active_goals
 
@@ -155,16 +112,16 @@ class GoalOperations(BaseOperations):
         completion_map = {2: "complete", 1: "on", 0: "off"}
         status = completion_map.get(data.get("Completion", 0), "off")
 
-        return {
-            "id": data["Id"],
-            "user_id": user_id,
-            "user_name": data["Owner"]["Name"],
-            "title": title,
-            "meeting_id": meeting_id,
-            "meeting_title": data["Origins"][0]["Name"],
-            "status": status,
-            "created_at": data["CreateTime"],
-        }
+        return CreatedGoalInfo(
+            id=data["Id"],
+            user_id=user_id,
+            user_name=data["Owner"]["Name"],
+            title=title,
+            meeting_id=meeting_id,
+            meeting_title=data["Origins"][0]["Name"],
+            status=status,
+            created_at=data["CreateTime"],
+        )
 
     def delete(self, goal_id: int) -> bool:
         """Delete a goal.
@@ -285,12 +242,12 @@ class GoalOperations(BaseOperations):
         data = response.json()
 
         return [
-            {
-                "id": goal["Id"],
-                "title": goal["Name"],
-                "created_at": goal["CreateTime"],
-                "due_date": goal["DueDate"],
-                "status": "Complete" if goal.get("Complete") else "Incomplete",
-            }
+            ArchivedGoalInfo(
+                id=goal["Id"],
+                title=goal["Name"],
+                created_at=goal["CreateTime"],
+                due_date=goal["DueDate"],
+                status="Complete" if goal.get("Complete") else "Incomplete",
+            )
             for goal in data
         ]

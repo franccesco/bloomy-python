@@ -50,20 +50,13 @@ def mock_config():
 @pytest.fixture
 def sample_user_data():
     """Sample user data for testing."""
-    return {
-        "Id": 123,
-        "Name": "John Doe",
-        "ImageUrl": "https://example.com/avatar.jpg"
-    }
+    return {"Id": 123, "Name": "John Doe", "ImageUrl": "https://example.com/avatar.jpg"}
 
 
 @pytest.fixture
 def sample_meeting_data():
     """Sample meeting data for testing."""
-    return {
-        "Id": 456,
-        "Name": "Weekly Team Meeting"
-    }
+    return {"Id": 456, "Name": "Weekly Team Meeting"}
 
 
 @pytest.fixture
@@ -77,10 +70,7 @@ def sample_todo_data():
         "Complete": False,
         "CreateTime": "2024-01-01T10:00:00Z",
         "CompleteTime": None,
-        "Owner": {
-            "Id": 123,
-            "Name": "John Doe"
-        }
+        "Owner": {"Id": 123, "Name": "John Doe"},
     }
 
 
@@ -93,16 +83,8 @@ def sample_goal_data():
         "CreateTime": "2024-01-01T10:00:00Z",
         "DueDate": "2024-12-31",
         "Complete": False,
-        "Owner": {
-            "Id": 123,
-            "Name": "John Doe"
-        },
-        "Origins": [
-            {
-                "Id": 456,
-                "Name": "Q1 Planning Meeting"
-            }
-        ]
+        "Owner": {"Id": 123, "Name": "John Doe"},
+        "Origins": [{"Id": 456, "Name": "Q1 Planning Meeting"}],
     }
 
 
@@ -120,7 +102,7 @@ def sample_scorecard_data():
                 "Measured": 95000,
                 "Week": "2024-W25",
                 "ForWeek": 25,
-                "DateEntered": "2024-06-20T10:00:00Z"
+                "DateEntered": "2024-06-20T10:00:00Z",
             }
         ]
     }
@@ -136,12 +118,9 @@ def sample_issue_data():
         "CreateTime": "2024-06-01T10:00:00Z",
         "CloseTime": None,
         "Complete": False,
-        "Owner": {
-            "Id": 123,
-            "Name": "John Doe"
-        },
+        "Owner": {"Id": 123, "Name": "John Doe"},
         "Origin": "Infrastructure Meeting",
-        "OriginId": 456
+        "OriginId": 456,
     }
 
 
@@ -153,13 +132,10 @@ def sample_headline_data():
         "Name": "Product launch successful",
         "DetailsUrl": "https://example.com/headline/501",
         "Notes": "Exceeded targets by 15%",
-        "Owner": {
-            "Id": 123,
-            "Name": "John Doe"
-        },
+        "Owner": {"Id": 123, "Name": "John Doe"},
         "Origin": "Product Meeting",
         "OriginId": 456,
         "Archived": False,
         "CreateTime": "2024-06-01T10:00:00Z",
-        "CloseTime": None
+        "CloseTime": None,
     }

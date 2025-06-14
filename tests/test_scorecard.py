@@ -17,17 +17,17 @@ class TestScorecardOperations:
             "Id": 2024025,
             "ForWeekNumber": 25,
             "LocalDate": {"Date": "2024-06-17"},
-            "ForWeek": "2024-06-23"
+            "ForWeek": "2024-06-23",
         }
         mock_http_client.get.return_value = mock_response
 
         scorecard_ops = ScorecardOperations(mock_http_client)
         result = scorecard_ops.current_week()
 
-        assert result["id"] == 2024025
-        assert result["week_number"] == 25
-        assert result["week_start"] == "2024-06-17"
-        assert result["week_end"] == "2024-06-23"
+        assert result.id == 2024025
+        assert result.week_number == 25
+        assert result.week_start == "2024-06-17"
+        assert result.week_end == "2024-06-23"
 
         mock_http_client.get.assert_called_once_with("weeks/current")
 
@@ -43,10 +43,10 @@ class TestScorecardOperations:
         result = scorecard_ops.list()
 
         assert len(result) == 1
-        assert result[0]["id"] == 201
-        assert result[0]["title"] == "Sales Revenue"
-        assert result[0]["target"] == 100000
-        assert result[0]["value"] == 95000
+        assert result[0].id == 201
+        assert result[0].title == "Sales Revenue"
+        assert result[0].target == 100000
+        assert result[0].value == 95000
 
         mock_http_client.get.assert_called_once_with("scorecard/user/123")
 
@@ -86,7 +86,7 @@ class TestScorecardOperations:
                     "Measured": 95000,
                     "Week": "2024-W25",
                     "ForWeek": 25,
-                    "DateEntered": "2024-06-20T10:00:00Z"
+                    "DateEntered": "2024-06-20T10:00:00Z",
                 },
                 {
                     "Id": 202,
@@ -97,8 +97,8 @@ class TestScorecardOperations:
                     "Measured": 48,
                     "Week": "2024-W24",
                     "ForWeek": 24,
-                    "DateEntered": "2024-06-13T10:00:00Z"
-                }
+                    "DateEntered": "2024-06-13T10:00:00Z",
+                },
             ]
         }
 
@@ -108,7 +108,7 @@ class TestScorecardOperations:
             "Id": 2024025,
             "ForWeekNumber": 25,
             "LocalDate": {"Date": "2024-06-17"},
-            "ForWeek": "2024-06-23"
+            "ForWeek": "2024-06-23",
         }
 
         mock_http_client.get.side_effect = [scorecard_response, week_response]
@@ -120,7 +120,7 @@ class TestScorecardOperations:
 
         # Should only return week 24 (25 - 1)
         assert len(result) == 1
-        assert result[0]["week_id"] == 24
+        assert result[0].week_id == 24
 
     def test_list_filter_empty_values(self, mock_http_client):
         """Test filtering empty values from scorecard."""
@@ -136,7 +136,7 @@ class TestScorecardOperations:
                     "Measured": 95000,
                     "Week": "2024-W25",
                     "ForWeek": 25,
-                    "DateEntered": "2024-06-20T10:00:00Z"
+                    "DateEntered": "2024-06-20T10:00:00Z",
                 },
                 {
                     "Id": 202,
@@ -147,8 +147,8 @@ class TestScorecardOperations:
                     "Measured": None,  # Empty value
                     "Week": "2024-W25",
                     "ForWeek": 25,
-                    "DateEntered": "2024-06-20T10:00:00Z"
-                }
+                    "DateEntered": "2024-06-20T10:00:00Z",
+                },
             ]
         }
         mock_http_client.get.return_value = mock_response
@@ -159,7 +159,7 @@ class TestScorecardOperations:
         # Without show_empty
         result = scorecard_ops.list()
         assert len(result) == 1
-        assert result[0]["value"] == 95000
+        assert result[0].value == 95000
 
         # With show_empty
         result = scorecard_ops.list(show_empty=True)
@@ -173,7 +173,7 @@ class TestScorecardOperations:
             "Id": 2024025,
             "ForWeekNumber": 25,
             "LocalDate": {"Date": "2024-06-17"},
-            "ForWeek": "2024-06-23"
+            "ForWeek": "2024-06-23",
         }
 
         # Mock score update response
@@ -189,8 +189,7 @@ class TestScorecardOperations:
         assert result is True
 
         mock_http_client.put.assert_called_once_with(
-            "measurables/301/week/25",
-            json={"value": 97.5}
+            "measurables/301/week/25", json={"value": 97.5}
         )
 
     def test_score_with_week_offset(self, mock_http_client):
@@ -200,7 +199,7 @@ class TestScorecardOperations:
             "Id": 2024025,
             "ForWeekNumber": 25,
             "LocalDate": {"Date": "2024-06-17"},
-            "ForWeek": "2024-06-23"
+            "ForWeek": "2024-06-23",
         }
 
         update_response = Mock()
@@ -216,6 +215,5 @@ class TestScorecardOperations:
 
         # Should update week 24 (25 - 1)
         mock_http_client.put.assert_called_once_with(
-            "measurables/301/week/24",
-            json={"value": 97.5}
+            "measurables/301/week/24", json={"value": 97.5}
         )

@@ -3,48 +3,9 @@
 from __future__ import annotations
 
 import builtins
-from typing import TYPE_CHECKING, TypedDict
 
+from ..models import CreatedIssue, IssueDetails, IssueListItem
 from ..utils.base_operations import BaseOperations
-
-if TYPE_CHECKING:
-    pass
-
-
-class IssueDetails(TypedDict):
-    """Type definition for issue details."""
-
-    id: int
-    title: str
-    notes_url: str
-    created_at: str
-    completed_at: str | None
-    meeting_id: int
-    meeting_title: str
-    user_id: int
-    user_name: str
-
-
-class IssueListItem(TypedDict):
-    """Type definition for issue list items."""
-
-    id: int
-    title: str
-    notes_url: str
-    created_at: str
-    meeting_id: int
-    meeting_title: str
-
-
-class CreatedIssue(TypedDict):
-    """Type definition for created issue response."""
-
-    id: int
-    meeting_id: int
-    meeting_title: str
-    title: str
-    user_id: int
-    notes_url: str
 
 
 class IssueOperations(BaseOperations):
@@ -74,17 +35,17 @@ class IssueOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return {
-            "id": data["Id"],
-            "title": data["Name"],
-            "notes_url": data["DetailsUrl"],
-            "created_at": data["CreateTime"],
-            "completed_at": data["CloseTime"],
-            "meeting_id": data["OriginId"],
-            "meeting_title": data["Origin"],
-            "user_id": data["Owner"]["Id"],
-            "user_name": data["Owner"]["Name"],
-        }
+        return IssueDetails(
+            id=data["Id"],
+            title=data["Name"],
+            notes_url=data["DetailsUrl"],
+            created_at=data["CreateTime"],
+            completed_at=data["CloseTime"],
+            meeting_id=data["OriginId"],
+            meeting_title=data["Origin"],
+            user_id=data["Owner"]["Id"],
+            user_name=data["Owner"]["Name"],
+        )
 
     def list(
         self, user_id: int | None = None, meeting_id: int | None = None
@@ -127,14 +88,14 @@ class IssueOperations(BaseOperations):
         data = response.json()
 
         return [
-            {
-                "id": issue["Id"],
-                "title": issue["Name"],
-                "notes_url": issue["DetailsUrl"],
-                "created_at": issue["CreateTime"],
-                "meeting_id": issue["OriginId"],
-                "meeting_title": issue["Origin"],
-            }
+            IssueListItem(
+                id=issue["Id"],
+                title=issue["Name"],
+                notes_url=issue["DetailsUrl"],
+                created_at=issue["CreateTime"],
+                meeting_id=issue["OriginId"],
+                meeting_title=issue["Origin"],
+            )
             for issue in data
         ]
 
@@ -206,11 +167,11 @@ class IssueOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return {
-            "id": data["Id"],
-            "meeting_id": data["OriginId"],
-            "meeting_title": data["Origin"],
-            "title": data["Name"],
-            "user_id": data["Owner"]["Id"],
-            "notes_url": data["DetailsUrl"],
-        }
+        return CreatedIssue(
+            id=data["Id"],
+            meeting_id=data["OriginId"],
+            meeting_title=data["Origin"],
+            title=data["Name"],
+            user_id=data["Owner"]["Id"],
+            notes_url=data["DetailsUrl"],
+        )

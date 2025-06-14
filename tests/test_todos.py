@@ -22,9 +22,9 @@ class TestTodoOperations:
         result = todo_ops.list()
 
         assert len(result) == 1
-        assert result[0]["id"] == 789
-        assert result[0]["title"] == "Complete project proposal"
-        assert result[0]["status"] == "Incomplete"
+        assert result[0].id == 789
+        assert result[0].name == "Complete project proposal"
+        assert result[0].complete_date is None
 
         mock_http_client.get.assert_called_once_with("todo/user/123")
 
@@ -56,7 +56,7 @@ class TestTodoOperations:
             "Id": 999,
             "Name": "New Todo",
             "DueDate": "2024-12-31",
-            "DetailsUrl": "https://example.com/todo/999"
+            "DetailsUrl": "https://example.com/todo/999",
         }
         mock_http_client.post.return_value = mock_response
 
@@ -67,11 +67,11 @@ class TestTodoOperations:
             title="New Todo",
             meeting_id=456,
             due_date="2024-12-31",
-            notes="Important task"
+            notes="Important task",
         )
 
-        assert result["id"] == 999
-        assert result["title"] == "New Todo"
+        assert result.id == 999
+        assert result.name == "New Todo"
 
         mock_http_client.post.assert_called_once_with(
             "/api/v1/L10/456/todos",
@@ -79,8 +79,8 @@ class TestTodoOperations:
                 "title": "New Todo",
                 "accountableUserId": 123,
                 "notes": "Important task",
-                "dueDate": "2024-12-31"
-            }
+                "dueDate": "2024-12-31",
+            },
         )
 
     def test_complete_todo(self, mock_http_client):
@@ -94,7 +94,9 @@ class TestTodoOperations:
         result = todo_ops.complete(todo_id=789)
 
         assert result is True
-        mock_http_client.post.assert_called_once_with("/api/v1/todo/789/complete?status=true")
+        mock_http_client.post.assert_called_once_with(
+            "/api/v1/todo/789/complete?status=true"
+        )
 
     def test_update_todo(self, mock_http_client):
         """Test updating a todo."""
@@ -102,25 +104,23 @@ class TestTodoOperations:
         mock_response.json.return_value = {
             "Id": 789,
             "Name": "Updated Todo",
-            "DueDate": "2024-11-01"
+            "DueDate": "2024-11-01",
         }
         mock_response.status_code = 200
         mock_http_client.put.return_value = mock_response
 
         todo_ops = TodoOperations(mock_http_client)
         result = todo_ops.update(
-            todo_id=789,
-            title="Updated Todo",
-            due_date="2024-11-01"
+            todo_id=789, title="Updated Todo", due_date="2024-11-01"
         )
 
-        assert result["id"] == 789
-        assert result["title"] == "Updated Todo"
-        assert result["due_date"] == "2024-11-01"
+        assert result.id == 789
+        assert result.name == "Updated Todo"
+        assert result.due_date is not None
+        assert result.due_date.strftime("%Y-%m-%d") == "2024-11-01"
 
         mock_http_client.put.assert_called_once_with(
-            "/api/v1/todo/789",
-            json={"title": "Updated Todo", "dueDate": "2024-11-01"}
+            "/api/v1/todo/789", json={"title": "Updated Todo", "dueDate": "2024-11-01"}
         )
 
     def test_update_todo_no_fields(self, mock_http_client):
@@ -142,7 +142,7 @@ class TestTodoOperations:
             "DueDate": "2024-12-31",
             "CreateTime": "2024-01-01T10:00:00Z",
             "CompleteTime": None,
-            "Complete": False
+            "Complete": False,
         }
         mock_response.is_success = True
         mock_http_client.get.return_value = mock_response
@@ -150,8 +150,8 @@ class TestTodoOperations:
         todo_ops = TodoOperations(mock_http_client)
         result = todo_ops.details(todo_id=789)
 
-        assert result["id"] == 789
-        assert result["title"] == "Test Todo"
-        assert result["status"] == "Incomplete"
+        assert result.id == 789
+        assert result.name == "Test Todo"
+        assert result.complete_date is None
 
         mock_http_client.get.assert_called_once_with("/api/v1/todo/789")

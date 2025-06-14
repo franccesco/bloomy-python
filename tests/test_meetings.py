@@ -14,8 +14,20 @@ class TestMeetingOperations:
         """Test listing meetings."""
         mock_response = Mock()
         mock_response.json.return_value = [
-            {"Id": 456, "Name": "Weekly Team Meeting"},
-            {"Id": 789, "Name": "Monthly Review"}
+            {
+                "Id": 456,
+                "Name": "Weekly Team Meeting",
+                "StartDateUtc": "2024-01-01T10:00:00Z",
+                "CreateDate": "2024-01-01T10:00:00Z",
+                "OrganizationId": 1,
+            },
+            {
+                "Id": 789,
+                "Name": "Monthly Review",
+                "StartDateUtc": "2024-01-01T10:00:00Z",
+                "CreateDate": "2024-01-01T10:00:00Z",
+                "OrganizationId": 1,
+            },
         ]
         mock_http_client.get.return_value = mock_response
 
@@ -25,9 +37,9 @@ class TestMeetingOperations:
         result = meeting_ops.list()
 
         assert len(result) == 2
-        assert result[0]["id"] == 456
-        assert result[0]["title"] == "Weekly Team Meeting"
-        assert result[1]["id"] == 789
+        assert result[0].id == 456
+        assert result[0].name == "Weekly Team Meeting"
+        assert result[1].id == 789
 
         mock_http_client.get.assert_called_once_with("L10/123/list")
 
@@ -35,8 +47,12 @@ class TestMeetingOperations:
         """Test getting meeting attendees."""
         mock_response = Mock()
         mock_response.json.return_value = [
-            {"Id": 123, "Name": "John Doe"},
-            {"Id": 456, "Name": "Jane Smith"}
+            {"Id": 123, "Name": "John Doe", "ImageUrl": "https://example.com/john.jpg"},
+            {
+                "Id": 456,
+                "Name": "Jane Smith",
+                "ImageUrl": "https://example.com/jane.jpg",
+            },
         ]
         mock_http_client.get.return_value = mock_response
 
@@ -44,8 +60,8 @@ class TestMeetingOperations:
         result = meeting_ops.attendees(meeting_id=789)
 
         assert len(result) == 2
-        assert result[0]["id"] == 123
-        assert result[0]["name"] == "John Doe"
+        assert result[0].user_id == 123
+        assert result[0].name == "John Doe"
 
         mock_http_client.get.assert_called_once_with("L10/789/attendees")
 
@@ -60,7 +76,7 @@ class TestMeetingOperations:
                 "CreateTime": "2024-06-01T10:00:00Z",
                 "CloseTime": None,
                 "Owner": {"Id": 123, "Name": "John Doe"},
-                "Origin": "Infrastructure Meeting"
+                "Origin": "Infrastructure Meeting",
             }
         ]
         mock_http_client.get.return_value = mock_response
@@ -69,14 +85,13 @@ class TestMeetingOperations:
         result = meeting_ops.issues(meeting_id=789)
 
         assert len(result) == 1
-        assert result[0]["id"] == 101
-        assert result[0]["title"] == "Server issue"
-        assert result[0]["user_id"] == 123
-        assert result[0]["meeting_id"] == 789
+        assert result[0].id == 101
+        assert result[0].name == "Server issue"
+        assert result[0].owner_id == 123
+        assert result[0].meeting_id == 789
 
         mock_http_client.get.assert_called_once_with(
-            "L10/789/issues",
-            params={"include_resolved": False}
+            "L10/789/issues", params={"include_resolved": False}
         )
 
     def test_todos(self, mock_http_client, sample_todo_data):
@@ -89,13 +104,12 @@ class TestMeetingOperations:
         result = meeting_ops.todos(meeting_id=456, include_closed=True)
 
         assert len(result) == 1
-        assert result[0]["id"] == 789
-        assert result[0]["title"] == "Complete project proposal"
-        assert result[0]["status"] == "Incomplete"
+        assert result[0].id == 789
+        assert result[0].name == "Complete project proposal"
+        assert result[0].complete_date is None
 
         mock_http_client.get.assert_called_once_with(
-            "L10/456/todos",
-            params={"INCLUDE_CLOSED": True}
+            "L10/456/todos", params={"INCLUDE_CLOSED": True}
         )
 
     def test_metrics(self, mock_http_client):
@@ -109,12 +123,12 @@ class TestMeetingOperations:
                 "Direction": ">=",
                 "Modifiers": "currency",
                 "Owner": {"Id": 123, "Name": "John Doe"},
-                "Admin": {"Id": 456, "Name": "Jane Smith"}
+                "Admin": {"Id": 456, "Name": "Jane Smith"},
             },
             {
                 "Id": None,  # Should be skipped
-                "Name": "Invalid Metric"
-            }
+                "Name": "Invalid Metric",
+            },
         ]
         mock_http_client.get.return_value = mock_response
 
@@ -122,9 +136,9 @@ class TestMeetingOperations:
         result = meeting_ops.metrics(meeting_id=789)
 
         assert len(result) == 1  # Only valid metric
-        assert result[0]["id"] == 201
-        assert result[0]["title"] == "Sales Revenue"
-        assert result[0]["target"] == 100000.0
+        assert result[0].id == 201
+        assert result[0].title == "Sales Revenue"
+        assert result[0].target == 100000.0
 
         mock_http_client.get.assert_called_once_with("L10/789/measurables")
 
@@ -144,7 +158,13 @@ class TestMeetingOperations:
         # Mock list response
         list_response = Mock()
         list_response.json.return_value = [
-            {"Id": 789, "Name": "Team Meeting"}
+            {
+                "Id": 789,
+                "Name": "Team Meeting",
+                "StartDateUtc": "2024-01-01T10:00:00Z",
+                "CreateDate": "2024-01-01T10:00:00Z",
+                "OrganizationId": 1,
+            }
         ]
 
         # Mock other responses
@@ -165,7 +185,7 @@ class TestMeetingOperations:
             attendees_response,
             issues_response,
             todos_response,
-            metrics_response
+            metrics_response,
         ]
 
         meeting_ops = MeetingOperations(mock_http_client)
@@ -173,12 +193,12 @@ class TestMeetingOperations:
 
         result = meeting_ops.details(meeting_id=789)
 
-        assert result["id"] == 789
-        assert result["title"] == "Team Meeting"
-        assert "attendees" in result
-        assert "issues" in result
-        assert "todos" in result
-        assert "metrics" in result
+        assert result.id == 789
+        assert result.name == "Team Meeting"
+        assert result.attendees is not None
+        assert result.issues is not None
+        assert result.todos is not None
+        assert result.metrics is not None
 
     def test_details_meeting_not_found(self, mock_http_client):
         """Test getting details for non-existent meeting."""
@@ -202,9 +222,7 @@ class TestMeetingOperations:
 
         meeting_ops = MeetingOperations(mock_http_client)
         result = meeting_ops.create(
-            title="New Meeting",
-            add_self=True,
-            attendees=[123, 456]
+            title="New Meeting", add_self=True, attendees=[123, 456]
         )
 
         assert result["meeting_id"] == 999
@@ -213,8 +231,7 @@ class TestMeetingOperations:
 
         # Check create call
         mock_http_client.post.assert_any_call(
-            "L10/create",
-            json={"title": "New Meeting", "addSelf": True}
+            "L10/create", json={"title": "New Meeting", "addSelf": True}
         )
 
         # Check attendee calls

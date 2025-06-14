@@ -2,33 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict
-
+from ..models import DirectReport, Position, UserDetails, UserListItem, UserSearchResult
 from ..utils.base_operations import BaseOperations
-
-if TYPE_CHECKING:
-    from typing import Any
-
-
-class UserDetails(TypedDict, total=False):
-    """Type definition for user details."""
-
-    id: int
-    name: str
-    image_url: str
-    direct_reports: list[dict[str, Any]]
-    positions: list[dict[str, Any]]
-
-
-class UserSearchResult(TypedDict):
-    """Type definition for user search results."""
-
-    id: int
-    name: str
-    description: str
-    email: str
-    organization_id: int
-    image_url: str
 
 
 class UserOperations(BaseOperations):
@@ -50,7 +25,7 @@ class UserOperations(BaseOperations):
             all: Whether to include both direct reports and positions (default: False)
 
         Returns:
-            A dictionary containing user details
+            A UserDetails model containing user details
         """
         if user_id is None:
             user_id = self.user_id
@@ -59,28 +34,28 @@ class UserOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        user_details: UserDetails = {
+        user_details_dict = {
             "id": data["Id"],
             "name": data["Name"],
             "image_url": data["ImageUrl"],
         }
 
         if direct_reports or all:
-            user_details["direct_reports"] = self.direct_reports(user_id)
+            user_details_dict["direct_reports"] = self.direct_reports(user_id)
 
         if positions or all:
-            user_details["positions"] = self.positions(user_id)
+            user_details_dict["positions"] = self.positions(user_id)
 
-        return user_details
+        return UserDetails(**user_details_dict)
 
-    def direct_reports(self, user_id: int | None = None) -> list[dict[str, Any]]:
+    def direct_reports(self, user_id: int | None = None) -> list[DirectReport]:
         """Retrieve direct reports of a specific user.
 
         Args:
             user_id: The ID of the user (default: the current user ID)
 
         Returns:
-            A list of dictionaries containing direct report details
+            A list of DirectReport models containing direct report details
         """
         if user_id is None:
             user_id = self.user_id
@@ -90,22 +65,22 @@ class UserOperations(BaseOperations):
         data = response.json()
 
         return [
-            {
-                "name": report["Name"],
-                "id": report["Id"],
-                "image_url": report["ImageUrl"],
-            }
+            DirectReport(
+                name=report["Name"],
+                id=report["Id"],
+                image_url=report["ImageUrl"],
+            )
             for report in data
         ]
 
-    def positions(self, user_id: int | None = None) -> list[dict[str, Any]]:
+    def positions(self, user_id: int | None = None) -> list[Position]:
         """Retrieve positions of a specific user.
 
         Args:
             user_id: The ID of the user (default: the current user ID)
 
         Returns:
-            A list of dictionaries containing position details
+            A list of Position models containing position details
         """
         if user_id is None:
             user_id = self.user_id
@@ -115,10 +90,10 @@ class UserOperations(BaseOperations):
         data = response.json()
 
         return [
-            {
-                "name": position["Group"]["Position"]["Name"],
-                "id": position["Group"]["Position"]["Id"],
-            }
+            Position(
+                name=position["Group"]["Position"]["Name"],
+                id=position["Group"]["Position"]["Id"],
+            )
             for position in data
         ]
 
@@ -129,32 +104,32 @@ class UserOperations(BaseOperations):
             term: The search term
 
         Returns:
-            A list of dictionaries containing search results
+            A list of UserSearchResult models containing search results
         """
         response = self._client.get("search/user", params={"term": term})
         response.raise_for_status()
         data = response.json()
 
         return [
-            {
-                "id": user["Id"],
-                "name": user["Name"],
-                "description": user["Description"],
-                "email": user["Email"],
-                "organization_id": user["OrganizationId"],
-                "image_url": user["ImageUrl"],
-            }
+            UserSearchResult(
+                id=user["Id"],
+                name=user["Name"],
+                description=user["Description"],
+                email=user["Email"],
+                organization_id=user["OrganizationId"],
+                image_url=user["ImageUrl"],
+            )
             for user in data
         ]
 
-    def all(self, include_placeholders: bool = False) -> list[dict[str, Any]]:
+    def all(self, include_placeholders: bool = False) -> list[UserListItem]:
         """Retrieve all users in the system.
 
         Args:
             include_placeholders: Whether to include placeholder users (default: False)
 
         Returns:
-            A list of dictionaries containing user details
+            A list of UserListItem models containing user details
         """
         response = self._client.get("search/all", params={"term": "%"})
         response.raise_for_status()
@@ -168,12 +143,12 @@ class UserOperations(BaseOperations):
         ]
 
         return [
-            {
-                "id": user["Id"],
-                "name": user["Name"],
-                "email": user["Email"],
-                "position": user["Description"],
-                "image_url": user["ImageUrl"],
-            }
+            UserListItem(
+                id=user["Id"],
+                name=user["Name"],
+                email=user["Email"],
+                position=user["Description"],
+                image_url=user["ImageUrl"],
+            )
             for user in filtered_users
         ]

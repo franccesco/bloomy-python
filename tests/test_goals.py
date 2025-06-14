@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from bloomy.models import GoalListResponse
 from bloomy.operations.goals import GoalOperations
 
 
@@ -23,13 +24,12 @@ class TestGoalOperations:
 
         assert isinstance(result, list)
         assert len(result) == 1
-        assert result[0]["id"] == 101
-        assert result[0]["title"] == "Increase sales by 20%"
-        assert result[0]["status"] == "Incomplete"
+        assert result[0].id == 101
+        assert result[0].title == "Increase sales by 20%"
+        assert result[0].status == "Incomplete"
 
         mock_http_client.get.assert_called_once_with(
-            "rocks/user/123",
-            params={"include_origin": True}
+            "rocks/user/123", params={"include_origin": True}
         )
 
     def test_list_goals_with_archived(self, mock_http_client, sample_goal_data):
@@ -46,7 +46,7 @@ class TestGoalOperations:
                 "Name": "Old Goal",
                 "CreateTime": "2023-01-01T10:00:00Z",
                 "DueDate": "2023-12-31",
-                "Complete": True
+                "Complete": True,
             }
         ]
 
@@ -57,11 +57,10 @@ class TestGoalOperations:
 
         result = goal_ops.list(archived=True)
 
-        assert isinstance(result, dict)
-        assert "active" in result
-        assert "archived" in result
-        assert len(result["active"]) == 1
-        assert len(result["archived"]) == 1
+        # GoalListResponse is a Pydantic model, not a dict
+        assert isinstance(result, GoalListResponse)
+        assert len(result.active) == 1
+        assert len(result.archived) == 1
 
     def test_create_goal(self, mock_http_client):
         """Test creating a goal."""
@@ -72,31 +71,23 @@ class TestGoalOperations:
             "Owner": {"Id": 456, "Name": "Jane Smith"},
             "Origins": [{"Id": 789, "Name": "Planning Meeting"}],
             "CreateTime": "2024-06-01T10:00:00Z",
-            "Completion": 0
+            "Completion": 0,
         }
         mock_http_client.post.return_value = mock_response
 
         goal_ops = GoalOperations(mock_http_client)
         goal_ops._user_id = 123
 
-        result = goal_ops.create(
-            title="New Goal",
-            meeting_id=789,
-            user_id=456
-        )
+        result = goal_ops.create(title="New Goal", meeting_id=789, user_id=456)
 
-        assert result["id"] == 999
-        assert result["title"] == "New Goal"
-        assert result["user_id"] == 456
-        assert result["meeting_id"] == 789
-        assert result["meeting_title"] == "Planning Meeting"
+        assert result.id == 999
+        assert result.title == "New Goal"
+        assert result.user_id == 456
+        assert result.meeting_id == 789
+        assert result.meeting_title == "Planning Meeting"
 
         mock_http_client.post.assert_called_once_with(
-            "L10/789/rocks",
-            json={
-                "title": "New Goal",
-                "accountableUserId": 456
-            }
+            "L10/789/rocks", json={"title": "New Goal", "accountableUserId": 456}
         )
 
     def test_delete_goal(self, mock_http_client):
@@ -118,11 +109,7 @@ class TestGoalOperations:
         goal_ops = GoalOperations(mock_http_client)
         goal_ops._user_id = 123
 
-        result = goal_ops.update(
-            goal_id=101,
-            title="Updated Goal",
-            status="complete"
-        )
+        result = goal_ops.update(goal_id=101, title="Updated Goal", status="complete")
 
         assert result is True
         mock_http_client.put.assert_called_once_with(
@@ -130,8 +117,8 @@ class TestGoalOperations:
             json={
                 "accountableUserId": 123,
                 "title": "Updated Goal",
-                "completion": "Complete"
-            }
+                "completion": "Complete",
+            },
         )
 
     def test_update_goal_invalid_status(self, mock_http_client):

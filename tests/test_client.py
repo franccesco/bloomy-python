@@ -49,9 +49,9 @@ class TestClient:
                 headers={
                     "Accept": "*/*",
                     "Content-Type": "application/json",
-                    "Authorization": "Bearer test-key"
+                    "Authorization": "Bearer test-key",
                 },
-                timeout=30.0
+                timeout=30.0,
             )
 
     def test_operations_initialization(self):

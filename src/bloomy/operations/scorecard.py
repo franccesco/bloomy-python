@@ -3,35 +3,9 @@
 from __future__ import annotations
 
 import builtins
-from typing import TYPE_CHECKING, TypedDict
 
+from ..models import ScorecardItem, ScorecardWeek
 from ..utils.base_operations import BaseOperations
-
-if TYPE_CHECKING:
-    pass
-
-
-class CurrentWeek(TypedDict):
-    """Type definition for current week details."""
-
-    id: int
-    week_number: int
-    week_start: str
-    week_end: str
-
-
-class ScorecardItem(TypedDict):
-    """Type definition for scorecard items."""
-
-    id: int
-    measurable_id: int
-    accountable_user_id: int
-    title: str
-    target: float
-    value: float | None
-    week: int
-    week_id: int
-    updated_at: str
 
 
 class ScorecardOperations(BaseOperations):
@@ -42,7 +16,7 @@ class ScorecardOperations(BaseOperations):
         `client.scorecard.method`
     """
 
-    def current_week(self) -> CurrentWeek:
+    def current_week(self) -> ScorecardWeek:
         """Retrieve the current week details.
 
         Returns:
@@ -57,12 +31,12 @@ class ScorecardOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return {
-            "id": data["Id"],
-            "week_number": data["ForWeekNumber"],
-            "week_start": data["LocalDate"]["Date"],
-            "week_end": data["ForWeek"],
-        }
+        return ScorecardWeek(
+            id=data["Id"],
+            week_number=data["ForWeekNumber"],
+            week_start=data["LocalDate"]["Date"],
+            week_end=data["ForWeek"],
+        )
 
     def list(
         self,
@@ -119,29 +93,29 @@ class ScorecardOperations(BaseOperations):
         data = response.json()
 
         scorecards: list[ScorecardItem] = [
-            {
-                "id": scorecard["Id"],
-                "measurable_id": scorecard["MeasurableId"],
-                "accountable_user_id": scorecard["AccountableUserId"],
-                "title": scorecard["MeasurableName"],
-                "target": scorecard["Target"],
-                "value": scorecard["Measured"],
-                "week": scorecard["Week"],
-                "week_id": scorecard["ForWeek"],
-                "updated_at": scorecard["DateEntered"],
-            }
+            ScorecardItem(
+                id=scorecard["Id"],
+                measurable_id=scorecard["MeasurableId"],
+                accountable_user_id=scorecard["AccountableUserId"],
+                title=scorecard["MeasurableName"],
+                target=scorecard["Target"],
+                value=scorecard["Measured"],
+                week=scorecard["Week"],
+                week_id=scorecard["ForWeek"],
+                updated_at=scorecard["DateEntered"],
+            )
             for scorecard in data["Scores"]
         ]
 
         # Filter by week offset if provided
         if week_offset is not None:
             week_data = self.current_week()
-            target_week_id = week_data["week_number"] + week_offset
-            scorecards = [s for s in scorecards if s["week_id"] == target_week_id]
+            target_week_id = week_data.week_number + week_offset
+            scorecards = [s for s in scorecards if s.week_id == target_week_id]
 
         # Filter out empty values unless show_empty is True
         if not show_empty:
-            scorecards = [s for s in scorecards if s["value"] is not None]
+            scorecards = [s for s in scorecards if s.value is not None]
 
         return scorecards
 
@@ -162,7 +136,7 @@ class ScorecardOperations(BaseOperations):
             True
         """
         week_data = self.current_week()
-        week_id = week_data["week_number"] + week_offset
+        week_id = week_data.week_number + week_offset
 
         response = self._client.put(
             f"measurables/{measurable_id}/week/{week_id}",

@@ -3,60 +3,15 @@
 from __future__ import annotations
 
 import builtins
-from typing import TYPE_CHECKING, TypedDict
 
+from ..models import (
+    HeadlineDetails,
+    HeadlineInfo,
+    HeadlineListItem,
+    MeetingInfo,
+    OwnerDetails,
+)
 from ..utils.base_operations import BaseOperations
-
-if TYPE_CHECKING:
-    pass
-
-
-class OwnerDetails(TypedDict):
-    """Type definition for owner details."""
-
-    id: int
-    name: str | None
-
-
-class MeetingDetails(TypedDict):
-    """Type definition for meeting details."""
-
-    id: int
-    title: str
-
-
-class HeadlineInfo(TypedDict):
-    """Type definition for headline information."""
-
-    id: int
-    title: str
-    notes_url: str
-    owner_details: OwnerDetails
-
-
-class HeadlineDetails(TypedDict):
-    """Type definition for detailed headline information."""
-
-    id: int
-    title: str
-    notes_url: str
-    meeting_details: MeetingDetails
-    owner_details: OwnerDetails
-    archived: bool
-    created_at: str
-    closed_at: str | None
-
-
-class HeadlineListItem(TypedDict):
-    """Type definition for headline list items."""
-
-    id: int
-    title: str
-    meeting_details: MeetingDetails
-    owner_details: OwnerDetails
-    archived: bool
-    created_at: str
-    closed_at: str | None
 
 
 class HeadlineOperations(BaseOperations):
@@ -94,12 +49,12 @@ class HeadlineOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return {
-            "id": data["Id"],
-            "title": data["Name"],
-            "owner_details": {"id": data["OwnerId"], "name": None},
-            "notes_url": data["DetailsUrl"],
-        }
+        return HeadlineInfo(
+            id=data["Id"],
+            title=data["Name"],
+            owner_details=OwnerDetails(id=data["OwnerId"], name=None),
+            notes_url=data["DetailsUrl"],
+        )
 
     def update(self, headline_id: int, title: str) -> bool:
         """Update a headline.
@@ -138,22 +93,22 @@ class HeadlineOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return {
-            "id": data["Id"],
-            "title": data["Name"],
-            "notes_url": data["DetailsUrl"],
-            "meeting_details": {
-                "id": data["OriginId"],
-                "title": data["Origin"],
-            },
-            "owner_details": {
-                "id": data["Owner"]["Id"],
-                "name": data["Owner"]["Name"],
-            },
-            "archived": data["Archived"],
-            "created_at": data["CreateTime"],
-            "closed_at": data["CloseTime"],
-        }
+        return HeadlineDetails(
+            id=data["Id"],
+            title=data["Name"],
+            notes_url=data["DetailsUrl"],
+            meeting_details=MeetingInfo(
+                id=data["OriginId"],
+                title=data["Origin"],
+            ),
+            owner_details=OwnerDetails(
+                id=data["Owner"]["Id"],
+                name=data["Owner"]["Name"],
+            ),
+            archived=data["Archived"],
+            created_at=data["CreateTime"],
+            closed_at=data["CloseTime"],
+        )
 
     def list(
         self, user_id: int | None = None, meeting_id: int | None = None
@@ -206,21 +161,21 @@ class HeadlineOperations(BaseOperations):
         data = response.json()
 
         return [
-            {
-                "id": headline["Id"],
-                "title": headline["Name"],
-                "meeting_details": {
-                    "id": headline["OriginId"],
-                    "title": headline["Origin"],
-                },
-                "owner_details": {
-                    "id": headline["Owner"]["Id"],
-                    "name": headline["Owner"]["Name"],
-                },
-                "archived": headline["Archived"],
-                "created_at": headline["CreateTime"],
-                "closed_at": headline["CloseTime"],
-            }
+            HeadlineListItem(
+                id=headline["Id"],
+                title=headline["Name"],
+                meeting_details=MeetingInfo(
+                    id=headline["OriginId"],
+                    title=headline["Origin"],
+                ),
+                owner_details=OwnerDetails(
+                    id=headline["Owner"]["Id"],
+                    name=headline["Owner"]["Name"],
+                ),
+                archived=headline["Archived"],
+                created_at=headline["CreateTime"],
+                closed_at=headline["CloseTime"],
+            )
             for headline in data
         ]
 

@@ -4,24 +4,13 @@ from __future__ import annotations
 
 import builtins
 from datetime import datetime
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 
+from ..models import Todo
 from ..utils.base_operations import BaseOperations
 
 if TYPE_CHECKING:
     from typing import Any
-
-
-class TodoItem(TypedDict):
-    """Type definition for todo items."""
-
-    id: int
-    title: str
-    notes_url: str
-    due_date: str | None
-    created_at: str
-    completed_at: str | None
-    status: str
 
 
 class TodoOperations(BaseOperations):
@@ -34,7 +23,7 @@ class TodoOperations(BaseOperations):
 
     def list(
         self, user_id: int | None = None, meeting_id: int | None = None
-    ) -> builtins.list[TodoItem]:
+    ) -> builtins.list[Todo]:
         """List all todos for a specific user or meeting.
 
         Args:
@@ -68,15 +57,16 @@ class TodoOperations(BaseOperations):
         data = response.json()
 
         return [
-            {
-                "id": todo["Id"],
-                "title": todo["Name"],
-                "notes_url": todo["DetailsUrl"],
-                "due_date": todo["DueDate"],
-                "created_at": todo["CreateTime"],
-                "completed_at": todo["CompleteTime"],
-                "status": "Complete" if todo["Complete"] else "Incomplete",
-            }
+            Todo(
+                Id=todo["Id"],
+                Name=todo["Name"],
+                DetailsUrl=todo["DetailsUrl"],
+                DueDate=todo["DueDate"],
+                CompleteDate=todo["CompleteTime"] if todo["Complete"] else None,
+                CreateDate=todo["CreateTime"],
+                MeetingId=meeting_id,
+                MeetingName=None,
+            )
             for todo in data
         ]
 
@@ -87,7 +77,7 @@ class TodoOperations(BaseOperations):
         due_date: str | None = None,
         user_id: int | None = None,
         notes: str | None = None,
-    ) -> TodoItem:
+    ) -> Todo:
         """Create a new todo.
 
         Args:
@@ -123,15 +113,16 @@ class TodoOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return {
-            "id": data["Id"],
-            "title": data["Name"],
-            "notes_url": data["DetailsUrl"],
-            "due_date": data["DueDate"],
-            "created_at": datetime.now().isoformat(),
-            "completed_at": None,
-            "status": "Incomplete",
-        }
+        return Todo(
+            Id=data["Id"],
+            Name=data["Name"],
+            DetailsUrl=data["DetailsUrl"],
+            DueDate=data["DueDate"],
+            CompleteDate=None,
+            CreateDate=datetime.now(),
+            MeetingId=meeting_id,
+            MeetingName=None,
+        )
 
     def complete(self, todo_id: int) -> bool:
         """Mark a todo as complete.
@@ -155,7 +146,7 @@ class TodoOperations(BaseOperations):
         todo_id: int,
         title: str | None = None,
         due_date: str | None = None,
-    ) -> TodoItem:
+    ) -> Todo:
         """Update an existing todo.
 
         Args:
@@ -192,17 +183,18 @@ class TodoOperations(BaseOperations):
         if response.status_code != 200:
             raise RuntimeError(f"Failed to update todo. Status: {response.status_code}")
 
-        return {
-            "id": todo_id,
-            "title": title or "",
-            "notes_url": "",
-            "due_date": due_date,
-            "created_at": "",
-            "completed_at": None,
-            "status": "Incomplete",
-        }
+        return Todo(
+            Id=todo_id,
+            Name=title or "",
+            DetailsUrl="",
+            DueDate=due_date if due_date is None else datetime.fromisoformat(due_date),
+            CompleteDate=None,
+            CreateDate=datetime.now(),
+            MeetingId=None,
+            MeetingName=None,
+        )
 
-    def details(self, todo_id: int) -> TodoItem:
+    def details(self, todo_id: int) -> Todo:
         """Retrieve the details of a specific todo item by its ID.
 
         Args:
@@ -228,12 +220,13 @@ class TodoOperations(BaseOperations):
         response.raise_for_status()
         todo = response.json()
 
-        return {
-            "id": todo["Id"],
-            "title": todo["Name"],
-            "notes_url": todo["DetailsUrl"],
-            "due_date": todo["DueDate"],
-            "created_at": todo["CreateTime"],
-            "completed_at": todo["CompleteTime"],
-            "status": "Complete" if todo["Complete"] else "Incomplete",
-        }
+        return Todo(
+            Id=todo["Id"],
+            Name=todo["Name"],
+            DetailsUrl=todo["DetailsUrl"],
+            DueDate=todo["DueDate"],
+            CompleteDate=todo["CompleteTime"] if todo["Complete"] else None,
+            CreateDate=todo["CreateTime"],
+            MeetingId=None,
+            MeetingName=None,
+        )

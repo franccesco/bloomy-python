@@ -19,11 +19,11 @@ class TestIssueOperations:
         issue_ops = IssueOperations(mock_http_client)
         result = issue_ops.details(issue_id=401)
 
-        assert result["id"] == 401
-        assert result["title"] == "Server performance issue"
-        assert result["notes_url"] == "https://example.com/issue/401"
-        assert result["user_id"] == 123
-        assert result["meeting_id"] == 456
+        assert result.id == 401
+        assert result.title == "Server performance issue"
+        assert result.notes_url == "https://example.com/issue/401"
+        assert result.user_id == 123
+        assert result.meeting_id == 456
 
         mock_http_client.get.assert_called_once_with("issues/401")
 
@@ -37,7 +37,7 @@ class TestIssueOperations:
                 "CreateTime": "2024-06-01T10:00:00Z",
                 "Origin": "Infrastructure Meeting",
                 "OriginId": 456,
-                "DetailsUrl": "https://example.com/issue/401"
+                "DetailsUrl": "https://example.com/issue/401",
             }
         ]
         mock_http_client.get.return_value = mock_response
@@ -48,10 +48,10 @@ class TestIssueOperations:
         result = issue_ops.list()
 
         assert len(result) == 1
-        assert result[0]["id"] == 401
-        assert result[0]["title"] == "Server issue"
-        assert result[0]["created_at"] == "2024-06-01T10:00:00Z"
-        assert result[0]["meeting_title"] == "Infrastructure Meeting"
+        assert result[0].id == 401
+        assert result[0].title == "Server issue"
+        assert result[0].created_at == "2024-06-01T10:00:00Z"
+        assert result[0].meeting_title == "Infrastructure Meeting"
 
         mock_http_client.get.assert_called_once_with("issues/users/123")
 
@@ -65,7 +65,7 @@ class TestIssueOperations:
                 "CreateTime": "2024-06-01T10:00:00Z",
                 "Origin": "Infrastructure Meeting",
                 "OriginId": 456,
-                "DetailsUrl": "https://example.com/issue/401"
+                "DetailsUrl": "https://example.com/issue/401",
             }
         ]
         mock_http_client.get.return_value = mock_response
@@ -95,8 +95,7 @@ class TestIssueOperations:
 
         assert result is True
         mock_http_client.post.assert_called_once_with(
-            "issues/401/complete",
-            json={"complete": True}
+            "issues/401/complete", json={"complete": True}
         )
 
     def test_create(self, mock_http_client):
@@ -108,7 +107,7 @@ class TestIssueOperations:
             "Origin": "Planning Meeting",
             "Name": "New Issue",
             "Owner": {"Id": 789},
-            "DetailsUrl": "https://example.com/issue/999"
+            "DetailsUrl": "https://example.com/issue/999",
         }
         mock_http_client.post.return_value = mock_response
 
@@ -116,16 +115,13 @@ class TestIssueOperations:
         issue_ops._user_id = 123
 
         result = issue_ops.create(
-            meeting_id=456,
-            title="New Issue",
-            user_id=789,
-            notes="Issue description"
+            meeting_id=456, title="New Issue", user_id=789, notes="Issue description"
         )
 
-        assert result["id"] == 999
-        assert result["title"] == "New Issue"
-        assert result["user_id"] == 789
-        assert result["meeting_id"] == 456
+        assert result.id == 999
+        assert result.title == "New Issue"
+        assert result.user_id == 789
+        assert result.meeting_id == 456
 
         mock_http_client.post.assert_called_once_with(
             "issues/create",
@@ -133,8 +129,8 @@ class TestIssueOperations:
                 "title": "New Issue",
                 "ownerid": 789,
                 "meetingid": 456,
-                "notes": "Issue description"
-            }
+                "notes": "Issue description",
+            },
         )
 
     def test_create_default_user(self, mock_http_client):
@@ -146,25 +142,18 @@ class TestIssueOperations:
             "Origin": "Planning Meeting",
             "Name": "New Issue",
             "Owner": {"Id": 123},
-            "DetailsUrl": "https://example.com/issue/999"
+            "DetailsUrl": "https://example.com/issue/999",
         }
         mock_http_client.post.return_value = mock_response
 
         issue_ops = IssueOperations(mock_http_client)
         issue_ops._user_id = 123
 
-        result = issue_ops.create(
-            meeting_id=456,
-            title="New Issue"
-        )
+        result = issue_ops.create(meeting_id=456, title="New Issue")
 
-        assert result["user_id"] == 123
+        assert result.user_id == 123
 
         mock_http_client.post.assert_called_once_with(
             "issues/create",
-            json={
-                "title": "New Issue",
-                "ownerid": 123,
-                "meetingid": 456
-            }
+            json={"title": "New Issue", "ownerid": 123, "meetingid": 456},
         )

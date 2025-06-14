@@ -19,11 +19,11 @@ class TestUserOperations:
 
         result = user_ops.details()
 
-        assert "id" in result and result["id"] == 123
-        assert "name" in result and result["name"] == "John Doe"
-        assert "image_url" in result and result["image_url"] == "https://example.com/avatar.jpg"
-        assert "direct_reports" not in result
-        assert "positions" not in result
+        assert result.id == 123
+        assert result.name == "John Doe"
+        assert result.image_url == "https://example.com/avatar.jpg"
+        assert result.direct_reports is None
+        assert result.positions is None
 
         mock_http_client.get.assert_called_once_with("users/123")
 
@@ -36,7 +36,11 @@ class TestUserOperations:
         # Mock direct reports response
         reports_response = Mock()
         reports_response.json.return_value = [
-            {"Id": 456, "Name": "Jane Smith", "ImageUrl": "https://example.com/jane.jpg"}
+            {
+                "Id": 456,
+                "Name": "Jane Smith",
+                "ImageUrl": "https://example.com/jane.jpg",
+            }
         ]
 
         mock_http_client.get.side_effect = [user_response, reports_response]
@@ -46,9 +50,9 @@ class TestUserOperations:
 
         result = user_ops.details(direct_reports=True)
 
-        assert "direct_reports" in result
-        assert len(result["direct_reports"]) == 1
-        assert result["direct_reports"][0]["id"] == 456
+        assert result.direct_reports is not None
+        assert len(result.direct_reports) == 1
+        assert result.direct_reports[0].id == 456
 
     def test_details_with_all(self, mock_http_client, sample_user_data):
         """Test getting user details with all information."""
@@ -65,23 +69,33 @@ class TestUserOperations:
         ]
 
         mock_http_client.get.side_effect = [
-            user_response, reports_response, positions_response
+            user_response,
+            reports_response,
+            positions_response,
         ]
 
         user_ops = UserOperations(mock_http_client)
         result = user_ops.details(user_id=123, all=True)
 
-        assert "direct_reports" in result
-        assert "positions" in result
-        assert len(result["positions"]) == 1
-        assert result["positions"][0]["name"] == "Manager"
+        assert result.direct_reports is not None
+        assert result.positions is not None
+        assert len(result.positions) == 1
+        assert result.positions[0].name == "Manager"
 
     def test_direct_reports(self, mock_http_client):
         """Test getting direct reports."""
         mock_response = Mock()
         mock_response.json.return_value = [
-            {"Id": 456, "Name": "Jane Smith", "ImageUrl": "https://example.com/jane.jpg"},
-            {"Id": 789, "Name": "Bob Johnson", "ImageUrl": "https://example.com/bob.jpg"}
+            {
+                "Id": 456,
+                "Name": "Jane Smith",
+                "ImageUrl": "https://example.com/jane.jpg",
+            },
+            {
+                "Id": 789,
+                "Name": "Bob Johnson",
+                "ImageUrl": "https://example.com/bob.jpg",
+            },
         ]
         mock_http_client.get.return_value = mock_response
 
@@ -89,9 +103,9 @@ class TestUserOperations:
         result = user_ops.direct_reports(user_id=123)
 
         assert len(result) == 2
-        assert result[0]["id"] == 456
-        assert result[0]["name"] == "Jane Smith"
-        assert result[1]["id"] == 789
+        assert result[0].id == 456
+        assert result[0].name == "Jane Smith"
+        assert result[1].id == 789
 
         mock_http_client.get.assert_called_once_with("users/123/directreports")
 
@@ -100,7 +114,7 @@ class TestUserOperations:
         mock_response = Mock()
         mock_response.json.return_value = [
             {"Group": {"Position": {"Id": 101, "Name": "Manager"}}},
-            {"Group": {"Position": {"Id": 102, "Name": "Team Lead"}}}
+            {"Group": {"Position": {"Id": 102, "Name": "Team Lead"}}},
         ]
         mock_http_client.get.return_value = mock_response
 
@@ -108,9 +122,9 @@ class TestUserOperations:
         result = user_ops.positions(user_id=123)
 
         assert len(result) == 2
-        assert result[0]["id"] == 101
-        assert result[0]["name"] == "Manager"
-        assert result[1]["name"] == "Team Lead"
+        assert result[0].id == 101
+        assert result[0].name == "Manager"
+        assert result[1].name == "Team Lead"
 
         mock_http_client.get.assert_called_once_with("users/123/seats")
 
@@ -124,7 +138,7 @@ class TestUserOperations:
                 "Description": "Manager",
                 "Email": "john@example.com",
                 "OrganizationId": 1,
-                "ImageUrl": "https://example.com/john.jpg"
+                "ImageUrl": "https://example.com/john.jpg",
             }
         ]
         mock_http_client.get.return_value = mock_response
@@ -133,9 +147,9 @@ class TestUserOperations:
         result = user_ops.search("john")
 
         assert len(result) == 1
-        assert result[0]["id"] == 123
-        assert result[0]["name"] == "John Doe"
-        assert result[0]["email"] == "john@example.com"
+        assert result[0].id == 123
+        assert result[0].name == "John Doe"
+        assert result[0].email == "john@example.com"
 
         mock_http_client.get.assert_called_once_with(
             "search/user", params={"term": "john"}
@@ -151,7 +165,7 @@ class TestUserOperations:
                 "Email": "john@example.com",
                 "Description": "Manager",
                 "ImageUrl": "https://example.com/john.jpg",
-                "ResultType": "User"
+                "ResultType": "User",
             },
             {
                 "Id": 456,
@@ -159,13 +173,9 @@ class TestUserOperations:
                 "Email": "",
                 "Description": "",
                 "ImageUrl": "/i/userplaceholder",
-                "ResultType": "User"
+                "ResultType": "User",
             },
-            {
-                "Id": 789,
-                "Name": "Group",
-                "ResultType": "Group"
-            }
+            {"Id": 789, "Name": "Group", "ResultType": "Group"},
         ]
         mock_http_client.get.return_value = mock_response
 
@@ -174,7 +184,7 @@ class TestUserOperations:
 
         # Should only return non-placeholder users
         assert len(result) == 1
-        assert result[0]["id"] == 123
+        assert result[0].id == 123
 
         # Test with placeholders included
         result_with_placeholders = user_ops.all(include_placeholders=True)
