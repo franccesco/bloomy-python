@@ -31,7 +31,8 @@ class IssueOperations(BaseOperations):
         Example:
             ```python
             client.issue.details(123)
-            # Returns: IssueDetails(id=123, title='Issue Title', created_at='2024-06-10', ...)
+            # Returns: IssueDetails(id=123, title='Issue Title',
+            #          created_at='2024-06-10', ...)
             ```
         """
         response = self._client.get(f"issues/{issue_id}")

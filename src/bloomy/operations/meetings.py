@@ -60,7 +60,8 @@ class MeetingOperations(BaseOperations):
         Example:
             ```python
             client.meeting.attendees(1)
-            # Returns: [MeetingAttendee(user_id=1, name='John Doe', image_url='...'), ...]
+            # Returns: [MeetingAttendee(user_id=1, name='John Doe',
+            #          image_url='...'), ...]
             ```
         """
         response = self._client.get(f"L10/{meeting_id}/attendees")
@@ -91,7 +92,8 @@ class MeetingOperations(BaseOperations):
         Example:
             ```python
             client.meeting.issues(1)
-            # Returns: [Issue(id=1, name='Issue Title', created_at='2024-06-10', ...), ...]
+            # Returns: [Issue(id=1, name='Issue Title',
+            #          created_at='2024-06-10', ...), ...]
             ```
         """
         response = self._client.get(

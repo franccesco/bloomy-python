@@ -42,21 +42,24 @@ class Client:
 
         Args:
             api_key: The API key to use. If not provided, will attempt to
-                     load from configuration.
+                     load from environment variable (BG_API_KEY) or configuration file.
 
         Raises:
             ValueError: If no API key is provided or found in configuration.
         """
-        if not api_key:
-            self.configuration = Configuration()
-            api_key = self.configuration.api_key
+        # Use Configuration class which handles priority:
+        # 1. Explicit api_key parameter
+        # 2. BG_API_KEY environment variable
+        # 3. Configuration file (~/.bloomy/config.yaml)
+        self.configuration = Configuration(api_key)
 
-        if not api_key:
+        if not self.configuration.api_key:
             raise ValueError(
-                "No API key provided. Set it in configuration or pass it directly."
+                "No API key provided. Set it explicitly, via BG_API_KEY "
+                "environment variable, or in ~/.bloomy/config.yaml configuration file."
             )
 
-        self._api_key = api_key
+        self._api_key = self.configuration.api_key
         self._base_url = "https://app.bloomgrowth.com/api/v1"
 
         # Initialize HTTP client
