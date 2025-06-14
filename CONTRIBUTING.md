@@ -28,7 +28,7 @@ git clone https://github.com/your-username/bloomy.git
 2. Install the dependencies:
 
 ```sh
-bundle install
+uv sync --all-extras
 ```
 
 3. Set up [pre-commit](https://pre-commit.com) hooks:
@@ -47,7 +47,7 @@ export PASSWORD=your_password
 5. Run the tests to make sure everything is green:
 
 ```sh
-bundle exec rspec --fail-fast
+uv run pytest -v --tb=short
 ```
 
 ### Making Changes
@@ -56,9 +56,12 @@ Once everything is green, you can start making changes. Make sure to write tests
 
 As for coding style guidelines make sure you:
 
-- Follow the Ruby Style Guide enforced by [StandardRB](https://github.com/standardrb/standard)
-- Use [YARD](https://yardoc.org) documentation for classes and methods
-- Include `@examples` in method documentation
+- Follow PEP 8 style guide enforced by [Ruff](https://github.com/astral-sh/ruff)
+- Use Python docstrings for classes and methods
+- Include type annotations for all public APIs
+- Run `uv run ruff format .` before committing
+- Run `uv run ruff check . --fix` to auto-fix linting issues
+- Run `uv run pyright` for type checking
 
 ### Pull Request Process
 
@@ -74,26 +77,40 @@ Make sure to follow these guidelines to ensure your PR is accepted and merged qu
 
 When developing new features, make sure to add a test. Tests will usually have the following basic structure:
 
-```ruby
-RSpec.describe "Feature" do
+```python
+import pytest
+from unittest.mock import Mock
+from bloomy import Client
 
-  # Your setup and teardown code here
-  before(:all) do
-    @client = Bloomy::Client.new
-    @meeting = @client.meeting.create("Meeting Name")
-  end
-
-  after(:all) do
-    @client.meeting.delete(@meeting[:meeting_id])
-  end
-
-  # Your tests here
-  context "when using the feature" do
-    it "performs the expected action" do
-      # Test implementation
-    end
-  end
-end
+class TestFeature:
+    @pytest.fixture
+    def mock_client(self):
+        """Create a mock client for testing."""
+        client = Mock(spec=Client)
+        client._http_client = Mock()
+        return client
+    
+    @pytest.fixture
+    def sample_meeting(self):
+        """Sample meeting data for tests."""
+        return {
+            "Id": 123,
+            "Name": "Test Meeting",
+            "StartTime": "10:00 AM",
+            "EndTime": "11:00 AM"
+        }
+    
+    def test_feature_action(self, mock_client, sample_meeting):
+        """Test the expected action."""
+        # Set up mock response
+        mock_client._http_client.get.return_value.json.return_value = sample_meeting
+        
+        # Perform the action
+        result = mock_client.meeting.details(123)
+        
+        # Assert the result
+        assert result["id"] == 123
+        assert result["name"] == "Test Meeting"
 ```
 
-In the `before(:all)` block, you can set up any necessary objects or variables that will be used in the tests. For example, creating a meeting object that will be used in the tests which will be deleted in the `after(:all)` block.
+Tests use pytest fixtures defined in `conftest.py` for common test data and mock objects. All API responses should be mocked to avoid making real API calls during tests.

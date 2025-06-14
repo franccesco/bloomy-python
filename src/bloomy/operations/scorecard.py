@@ -20,12 +20,12 @@ class ScorecardOperations(BaseOperations):
         """Retrieve the current week details.
 
         Returns:
-            A dictionary containing current week details
+            A ScorecardWeek model instance containing current week details
 
         Example:
             >>> client.scorecard.current_week()
-            {"id": 123, "week_number": 24, "week_start": "2024-06-10",
-             "week_end": "2024-06-16"}
+            ScorecardWeek(id=123, week_number=24, week_start='2024-06-10',
+                         week_end='2024-06-16')
         """
         response = self._client.get("weeks/current")
         response.raise_for_status()
@@ -54,7 +54,7 @@ class ScorecardOperations(BaseOperations):
             week_offset: Offset for the week number to filter scores
 
         Returns:
-            A list of scorecard dictionaries
+            A list of ScorecardItem model instances
 
         Raises:
             ValueError: If both user_id and meeting_id are provided

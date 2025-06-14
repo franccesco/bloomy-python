@@ -25,10 +25,11 @@ class Client:
     It provides methods for managing Bloom Growth features.
 
     Example:
-        >>> client = Bloomy.Client()
+        >>> from bloomy import Client
+        >>> client = Client()
         >>> client.meeting.list()
         >>> client.user.details()
-        >>> client.meeting.delete(id)
+        >>> client.meeting.delete(123)
         >>> client.scorecard.list()
         >>> client.issue.list()
         >>> client.headline.list()

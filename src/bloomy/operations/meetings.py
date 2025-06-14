@@ -31,7 +31,7 @@ class MeetingOperations(BaseOperations):
             user_id: The ID of the user (default is the initialized user ID)
 
         Returns:
-            A list of dictionaries containing meeting details
+            A list of Meeting model instances
 
         Example:
             >>> client.meeting.list()
@@ -53,11 +53,11 @@ class MeetingOperations(BaseOperations):
             meeting_id: The ID of the meeting
 
         Returns:
-            A list of dictionaries containing attendee details
+            A list of MeetingAttendee model instances
 
         Example:
             >>> client.meeting.attendees(1)
-            [{"name": "John Doe", "id": 1}, ...]
+            [MeetingAttendee(user_id=1, name='John Doe', image_url='...'), ...]
         """
         response = self._client.get(f"L10/{meeting_id}/attendees")
         response.raise_for_status()
@@ -82,11 +82,11 @@ class MeetingOperations(BaseOperations):
             include_closed: Whether to include closed issues (default: False)
 
         Returns:
-            A list of dictionaries containing issue details
+            A list of Issue model instances
 
         Example:
             >>> client.meeting.issues(1)
-            [{"id": 1, "title": "Issue Title", "created_at": "2024-06-10", ...}, ...]
+            [Issue(id=1, name='Issue Title', created_at='2024-06-10', ...), ...]
         """
         response = self._client.get(
             f"L10/{meeting_id}/issues",
@@ -122,11 +122,11 @@ class MeetingOperations(BaseOperations):
             include_closed: Whether to include closed todos (default: False)
 
         Returns:
-            A list of dictionaries containing todo details
+            A list of Todo model instances
 
         Example:
             >>> client.meeting.todos(1)
-            [{"id": 1, "title": "Todo Title", "due_date": "2024-06-12", ...}, ...]
+            [Todo(id=1, name='Todo Title', due_date='2024-06-12', ...), ...]
         """
         response = self._client.get(
             f"L10/{meeting_id}/todos",
@@ -156,12 +156,12 @@ class MeetingOperations(BaseOperations):
             meeting_id: The ID of the meeting
 
         Returns:
-            A list of dictionaries containing metric details
+            A list of ScorecardMetric model instances
 
         Example:
             >>> client.meeting.metrics(1)
-            [{"id": 1, "name": "Sales", "target": 100, "operator": ">",
-             "format": "currency", ...}, ...]
+            [ScorecardMetric(id=1, title='Sales', target=100.0,
+             metric_type='>', unit='currency', ...), ...]
         """
         response = self._client.get(f"L10/{meeting_id}/measurables")
         response.raise_for_status()
@@ -215,12 +215,12 @@ class MeetingOperations(BaseOperations):
             include_closed: Whether to include closed issues and todos (default: False)
 
         Returns:
-            A dictionary containing detailed information about the meeting
+            A MeetingDetails model instance with comprehensive meeting information
 
         Example:
             >>> client.meeting.details(1)
-            {"id": 1, "name": "Team Meeting", "attendees": [...],
-             "issues": [...], "todos": [...], "metrics": [...]}
+            MeetingDetails(id=1, name='Team Meeting', attendees=[...],
+                          issues=[...], todos=[...], metrics=[...])
         """
         meetings = self.list()
         meeting = next((m for m in meetings if m.id == meeting_id), None)

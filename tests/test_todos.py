@@ -80,7 +80,7 @@ class TestTodoOperations:
         assert result.name == "New Todo"
 
         mock_http_client.post.assert_called_once_with(
-            "/api/v1/L10/456/todos",
+            "L10/456/todos",
             json={
                 "title": "New Todo",
                 "accountableUserId": 123,
@@ -100,9 +100,7 @@ class TestTodoOperations:
         result = todo_ops.complete(todo_id=789)
 
         assert result is True
-        mock_http_client.post.assert_called_once_with(
-            "/api/v1/todo/789/complete?status=true"
-        )
+        mock_http_client.post.assert_called_once_with("todo/789/complete?status=true")
 
     def test_update_todo(self, mock_http_client: Mock) -> None:
         """Test updating a todo."""
@@ -126,7 +124,7 @@ class TestTodoOperations:
         assert result.due_date.strftime("%Y-%m-%d") == "2024-11-01"
 
         mock_http_client.put.assert_called_once_with(
-            "/api/v1/todo/789", json={"title": "Updated Todo", "dueDate": "2024-11-01"}
+            "todo/789", json={"title": "Updated Todo", "dueDate": "2024-11-01"}
         )
 
     def test_update_todo_no_fields(self, mock_http_client: Mock) -> None:
@@ -160,4 +158,4 @@ class TestTodoOperations:
         assert result.name == "Test Todo"
         assert result.complete_date is None
 
-        mock_http_client.get.assert_called_once_with("/api/v1/todo/789")
+        mock_http_client.get.assert_called_once_with("todo/789")

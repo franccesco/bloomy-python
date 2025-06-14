@@ -33,7 +33,8 @@ class HeadlineOperations(BaseOperations):
             notes: Additional notes for the headline
 
         Returns:
-            A dictionary containing id, title, owner_details, and notes_url
+            A HeadlineInfo model instance containing id, title, owner_details,
+            and notes_url
 
         Raises:
             httpx.HTTPStatusError: If the API request fails
@@ -81,8 +82,8 @@ class HeadlineOperations(BaseOperations):
             headline_id: The ID of the headline
 
         Returns:
-            A dictionary containing id, title, notes_url, meeting_details,
-            owner_details, archived, created_at, and closed_at
+            A HeadlineDetails model instance containing id, title, notes_url,
+            meeting_details, owner_details, archived, created_at, and closed_at
 
         Raises:
             httpx.HTTPStatusError: If the API request fails
@@ -120,7 +121,7 @@ class HeadlineOperations(BaseOperations):
             meeting_id: The ID of the meeting
 
         Returns:
-            A list of headlines containing:
+            A list of HeadlineListItem model instances containing:
             - id
             - title
             - meeting_details
@@ -136,15 +137,15 @@ class HeadlineOperations(BaseOperations):
         Example:
             >>> client.headline.list()
             [
-                {
-                    "id": 1,
-                    "title": "Headline Title",
-                    "meeting_details": {"id": 1, "title": "Team Meeting"},
-                    "owner_details": {"id": 1, "name": "John Doe"},
-                    "archived": False,
-                    "created_at": "2023-01-01",
-                    "closed_at": None
-                }
+                HeadlineListItem(
+                    id=1,
+                    title='Headline Title',
+                    meeting_details=MeetingInfo(id=1, title='Team Meeting'),
+                    owner_details=OwnerDetails(id=1, name='John Doe'),
+                    archived=False,
+                    created_at='2023-01-01',
+                    closed_at=None
+                )
             ]
         """
         if user_id and meeting_id:

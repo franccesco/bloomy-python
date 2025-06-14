@@ -31,21 +31,21 @@ class GoalOperations(BaseOperations):
 
         Returns:
             Either:
-            - An array of goal dictionaries if archived is false
-            - A dictionary with :active and :archived arrays of goal dictionaries
-              if archived is true
+            - A list of GoalInfo model instances if archived is false
+            - A GoalListResponse model with 'active' and 'archived' lists of
+              GoalInfo instances if archived is true
 
         Examples:
             List active goals:
             >>> client.goal.list()
-            [{"id": 1, "title": "Complete project", ...}]
+            [GoalInfo(id=1, title='Complete project', ...)]
 
             List both active and archived goals:
             >>> client.goal.list(archived=True)
-            {
-                "active": [{"id": 1, ...}],
-                "archived": [{"id": 2, ...}]
-            }
+            GoalListResponse(
+                active=[GoalInfo(id=1, ...)],
+                archived=[ArchivedGoalInfo(id=2, ...)]
+            )
         """
         if user_id is None:
             user_id = self.user_id
@@ -94,11 +94,11 @@ class GoalOperations(BaseOperations):
                 initialized user ID)
 
         Returns:
-            The newly created goal
+            A CreatedGoalInfo model instance representing the newly created goal
 
         Example:
             >>> client.goal.create(title="New Goal", meeting_id=1)
-            {"goal_id": 1, "title": "New Goal", "meeting_id": 1, ...}
+            CreatedGoalInfo(id=1, title='New Goal', meeting_id=1, ...)
         """
         if user_id is None:
             user_id = self.user_id
@@ -228,11 +228,12 @@ class GoalOperations(BaseOperations):
             user_id: The ID of the user (default is the initialized user ID)
 
         Returns:
-            An array of dictionaries containing archived goal details
+            A list of ArchivedGoalInfo model instances containing archived goal details
 
         Example:
             >>> goal._get_archived_goals()
-            [{"id": 1, "title": "Archived Goal", "created_at": "2024-06-10", ...}, ...]
+            [ArchivedGoalInfo(id=1, title='Archived Goal',
+                              created_at='2024-06-10', ...), ...]
         """
         if user_id is None:
             user_id = self.user_id

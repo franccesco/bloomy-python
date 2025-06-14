@@ -22,14 +22,15 @@ class IssueOperations(BaseOperations):
             issue_id: Unique identifier of the issue
 
         Returns:
-            A dictionary containing detailed information about the issue
+            An IssueDetails model instance containing detailed information
+            about the issue
 
         Raises:
             httpx.HTTPError: When the API request fails or returns invalid data
 
         Example:
             >>> client.issue.details(123)
-            {"id": 123, "title": "Issue Title", "created_at": "2024-06-10", ...}
+            IssueDetails(id=123, title='Issue Title', created_at='2024-06-10', ...)
         """
         response = self._client.get(f"issues/{issue_id}")
         response.raise_for_status()
@@ -57,7 +58,7 @@ class IssueOperations(BaseOperations):
             meeting_id: Unique identifier of the meeting (optional)
 
         Returns:
-            A list of issues matching the filter criteria
+            A list of IssueListItem model instances matching the filter criteria
 
         Raises:
             ValueError: When both user_id and meeting_id are provided
@@ -66,11 +67,11 @@ class IssueOperations(BaseOperations):
         Example:
             >>> # List issues for current user
             >>> client.issue.list()
-            [{"id": 1, "title": "Issue 1", ...}, ...]
+            [IssueListItem(id=1, title='Issue 1', ...), ...]
 
             >>> # List issues for specific meeting
             >>> client.issue.list(meeting_id=456)
-            [{"id": 2, "title": "Issue 2", ...}, ...]
+            [IssueListItem(id=2, title='Issue 2', ...), ...]
         """
         if user_id and meeting_id:
             raise ValueError(
@@ -137,7 +138,7 @@ class IssueOperations(BaseOperations):
             notes: Additional notes or description for the issue (optional)
 
         Returns:
-            A dictionary containing the newly created issue details
+            A CreatedIssue model instance containing the newly created issue details
 
         Raises:
             httpx.HTTPError: When the API request fails or returns invalid data
@@ -149,7 +150,7 @@ class IssueOperations(BaseOperations):
             ...     title="New Issue",
             ...     notes="This is a detailed description"
             ... )
-            {"id": 456, "title": "New Issue", "meeting_id": 123, ...}
+            CreatedIssue(id=456, title='New Issue', meeting_id=123, ...)
         """
         if user_id is None:
             user_id = self.user_id

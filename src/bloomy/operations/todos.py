@@ -31,7 +31,7 @@ class TodoOperations(BaseOperations):
             meeting_id: The ID of the meeting
 
         Returns:
-            A list of dictionaries containing todo details
+            A list of Todo model instances
 
         Raises:
             ValueError: If both user_id and meeting_id are provided
@@ -39,7 +39,7 @@ class TodoOperations(BaseOperations):
         Example:
             >>> # Fetch todos for the current user
             >>> client.todo.list()
-            [{"id": 1, "title": "New Todo", "due_date": "2024-06-15", ...}]
+            [Todo(id=1, name='New Todo', due_date='2024-06-15', ...)]
         """
         if user_id is not None and meeting_id is not None:
             raise ValueError(
@@ -89,13 +89,13 @@ class TodoOperations(BaseOperations):
             notes: Additional notes for the todo (optional)
 
         Returns:
-            A dictionary containing the newly created todo details
+            A Todo model instance representing the newly created todo
 
         Example:
             >>> client.todo.create(
                 title="New Todo", meeting_id=1, due_date="2024-06-15"
             )
-            {"id": 1, "title": "New Todo", "due_date": "2024-06-15", ...}
+            Todo(id=1, name='New Todo', due_date='2024-06-15', ...)
         """
         if user_id is None:
             user_id = self.user_id
@@ -109,7 +109,7 @@ class TodoOperations(BaseOperations):
         if due_date is not None:
             payload["dueDate"] = due_date
 
-        response = self._client.post(f"/api/v1/L10/{meeting_id}/todos", json=payload)
+        response = self._client.post(f"L10/{meeting_id}/todos", json=payload)
         response.raise_for_status()
         data = response.json()
 
@@ -137,7 +137,7 @@ class TodoOperations(BaseOperations):
             >>> client.todo.complete(1)
             True
         """
-        response = self._client.post(f"/api/v1/todo/{todo_id}/complete?status=true")
+        response = self._client.post(f"todo/{todo_id}/complete?status=true")
         response.raise_for_status()
         return response.is_success
 
@@ -155,7 +155,7 @@ class TodoOperations(BaseOperations):
             due_date: The new due date of the todo (optional)
 
         Returns:
-            A dictionary containing the updated todo details
+            A Todo model instance containing the updated todo details
 
         Raises:
             ValueError: If no update fields are provided
@@ -165,7 +165,7 @@ class TodoOperations(BaseOperations):
             >>> client.todo.update(
                 todo_id=1, title="Updated Todo", due_date="2024-11-01"
             )
-            {"id": 1, "title": "Updated Todo", "due_date": "2024-11-01", ...}
+            Todo(id=1, name='Updated Todo', due_date='2024-11-01', ...)
         """
         payload: dict[str, Any] = {}
 
@@ -178,7 +178,7 @@ class TodoOperations(BaseOperations):
         if not payload:
             raise ValueError("At least one field must be provided")
 
-        response = self._client.put(f"/api/v1/todo/{todo_id}", json=payload)
+        response = self._client.put(f"todo/{todo_id}", json=payload)
 
         if response.status_code != 200:
             raise RuntimeError(f"Failed to update todo. Status: {response.status_code}")
@@ -187,7 +187,7 @@ class TodoOperations(BaseOperations):
             Id=todo_id,
             Name=title or "",
             DetailsUrl="",
-            DueDate=due_date if due_date is None else datetime.fromisoformat(due_date),
+            DueDate=None if due_date is None else datetime.fromisoformat(due_date),
             CompleteDate=None,
             CreateDate=datetime.now(),
             MeetingId=None,
@@ -201,16 +201,16 @@ class TodoOperations(BaseOperations):
             todo_id: The ID of the todo item to retrieve
 
         Returns:
-            A dictionary containing the todo details
+            A Todo model instance containing the todo details
 
         Raises:
             RuntimeError: If the request to retrieve the todo details fails
 
         Example:
             >>> client.todo.details(1)
-            {"id": 1, "title": "Updated Todo", "due_date": "2024-11-01", ...}
+            Todo(id=1, name='Updated Todo', due_date='2024-11-01', ...)
         """
-        response = self._client.get(f"/api/v1/todo/{todo_id}")
+        response = self._client.get(f"todo/{todo_id}")
 
         if not response.is_success:
             raise RuntimeError(
