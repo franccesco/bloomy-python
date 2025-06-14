@@ -1,0 +1,119 @@
+site_name: Bloomy Python SDK
+site_url: https://github.com/fran/bloomy-python/
+site_description: Python SDK for Bloom Growth (EOS® Simple) API
+site_author: Bloomy Contributors
+repo_name: bloomy-python
+repo_url: https://github.com/fran/bloomy-python
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
+    - content.action.edit
+    - content.action.view
+  language: en
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            show_category_heading: true
+            members_order: source
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            summary: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - toc:
+      permalink: true
+  - attr_list
+  - def_list
+  - tables
+  - footnotes
+  - pymdownx.betterem
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Configuration: getting-started/configuration.md
+  - User Guide:
+      - Authentication: guide/authentication.md
+      - Basic Usage: guide/usage.md
+      - Error Handling: guide/errors.md
+  - API Reference:
+      - Client: api/client.md
+      - Operations:
+          - Users: api/operations/users.md
+          - Meetings: api/operations/meetings.md
+          - Todos: api/operations/todos.md
+          - Goals: api/operations/goals.md
+          - Scorecard: api/operations/scorecard.md
+          - Issues: api/operations/issues.md
+          - Headlines: api/operations/headlines.md
+      - Configuration: api/configuration.md
+      - Exceptions: api/exceptions.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/fran/bloomy-python
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/bloomy/
+
+copyright: |
+  &copy; 2024 <a href="https://github.com/fran/bloomy-python" target="_blank" rel="noopener">Bloomy Contributors</a>

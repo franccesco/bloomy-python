@@ -43,6 +43,18 @@ uv run ruff check . --fix
 uv run pyright
 ```
 
+### Documentation
+```bash
+# Serve documentation locally (with auto-reload)
+uv run mkdocs serve
+
+# Build documentation
+uv run mkdocs build
+
+# Deploy to GitHub Pages manually (if needed)
+uv run mkdocs gh-deploy
+```
+
 ## Architecture Overview
 
 ### SDK Structure
