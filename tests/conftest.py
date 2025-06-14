@@ -1,8 +1,10 @@
 """Pytest configuration and fixtures."""
 
-import pytest
 from unittest.mock import Mock, patch
+
 import httpx
+import pytest
+
 from bloomy import Client, Configuration
 
 

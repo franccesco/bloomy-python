@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Basic usage example for the Bloomy Python SDK."""
 
-import os
-from bloomy import Client, Configuration
-from bloomy.exceptions import BloomyError, AuthenticationError
+from bloomy import Client
+from bloomy.exceptions import AuthenticationError, BloomyError
 
 
 def main():
