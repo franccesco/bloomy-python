@@ -23,9 +23,11 @@ class ScorecardOperations(BaseOperations):
             A ScorecardWeek model instance containing current week details
 
         Example:
-            >>> client.scorecard.current_week()
-            ScorecardWeek(id=123, week_number=24, week_start='2024-06-10',
-                         week_end='2024-06-16')
+            ```python
+            client.scorecard.current_week()
+            # Returns: ScorecardWeek(id=123, week_number=24, week_start='2024-06-10',
+            #                       week_end='2024-06-16')
+            ```
         """
         response = self._client.get("weeks/current")
         response.raise_for_status()
@@ -60,14 +62,16 @@ class ScorecardOperations(BaseOperations):
             ValueError: If both user_id and meeting_id are provided
 
         Example:
-            >>> # Fetch scorecards for the current user
-            >>> client.scorecard.list()
+            ```python
+            # Fetch scorecards for the current user
+            client.scorecard.list()
 
-            >>> # Fetch scorecards for a specific user
-            >>> client.scorecard.list(user_id=42)
+            # Fetch scorecards for a specific user
+            client.scorecard.list(user_id=42)
 
-            >>> # Fetch scorecards for a specific meeting
-            >>> client.scorecard.list(meeting_id=99)
+            # Fetch scorecards for a specific meeting
+            client.scorecard.list(meeting_id=99)
+            ```
 
         Note:
             The week_offset parameter is useful when fetching scores for
@@ -132,8 +136,10 @@ class ScorecardOperations(BaseOperations):
             True if the score was successfully updated
 
         Example:
-            >>> client.scorecard.score(measurable_id=123, score=5)
-            True
+            ```python
+            client.scorecard.score(measurable_id=123, score=5)
+            # Returns: True
+            ```
         """
         week_data = self.current_week()
         week_id = week_data.week_number + week_offset

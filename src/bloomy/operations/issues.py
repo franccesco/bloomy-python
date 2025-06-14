@@ -29,8 +29,10 @@ class IssueOperations(BaseOperations):
             httpx.HTTPError: When the API request fails or returns invalid data
 
         Example:
-            >>> client.issue.details(123)
-            IssueDetails(id=123, title='Issue Title', created_at='2024-06-10', ...)
+            ```python
+            client.issue.details(123)
+            # Returns: IssueDetails(id=123, title='Issue Title', created_at='2024-06-10', ...)
+            ```
         """
         response = self._client.get(f"issues/{issue_id}")
         response.raise_for_status()
@@ -65,13 +67,15 @@ class IssueOperations(BaseOperations):
             httpx.HTTPError: When the API request fails or returns invalid data
 
         Example:
-            >>> # List issues for current user
-            >>> client.issue.list()
-            [IssueListItem(id=1, title='Issue 1', ...), ...]
+            ```python
+            # List issues for current user
+            client.issue.list()
+            # Returns: [IssueListItem(id=1, title='Issue 1', ...), ...]
 
-            >>> # List issues for specific meeting
-            >>> client.issue.list(meeting_id=456)
-            [IssueListItem(id=2, title='Issue 2', ...), ...]
+            # List issues for specific meeting
+            client.issue.list(meeting_id=456)
+            # Returns: [IssueListItem(id=2, title='Issue 2', ...), ...]
+            ```
         """
         if user_id and meeting_id:
             raise ValueError(
@@ -113,8 +117,10 @@ class IssueOperations(BaseOperations):
             httpx.HTTPError: When the API request fails
 
         Example:
-            >>> client.issue.solve(123)
-            True
+            ```python
+            client.issue.solve(123)
+            # Returns: True
+            ```
         """
         response = self._client.post(
             f"issues/{issue_id}/complete", json={"complete": True}
@@ -145,12 +151,14 @@ class IssueOperations(BaseOperations):
             ValueError: When required parameters are missing or invalid
 
         Example:
-            >>> client.issue.create(
-            ...     meeting_id=123,
-            ...     title="New Issue",
-            ...     notes="This is a detailed description"
-            ... )
-            CreatedIssue(id=456, title='New Issue', meeting_id=123, ...)
+            ```python
+            client.issue.create(
+                meeting_id=123,
+                title="New Issue",
+                notes="This is a detailed description"
+            )
+            # Returns: CreatedIssue(id=456, title='New Issue', meeting_id=123, ...)
+            ```
         """
         if user_id is None:
             user_id = self.user_id

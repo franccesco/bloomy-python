@@ -37,9 +37,11 @@ class TodoOperations(BaseOperations):
             ValueError: If both user_id and meeting_id are provided
 
         Example:
-            >>> # Fetch todos for the current user
-            >>> client.todo.list()
-            [Todo(id=1, name='New Todo', due_date='2024-06-15', ...)]
+            ```python
+            # Fetch todos for the current user
+            client.todo.list()
+            # Returns: [Todo(id=1, name='New Todo', due_date='2024-06-15', ...)]
+            ```
         """
         if user_id is not None and meeting_id is not None:
             raise ValueError(
@@ -92,10 +94,12 @@ class TodoOperations(BaseOperations):
             A Todo model instance representing the newly created todo
 
         Example:
-            >>> client.todo.create(
+            ```python
+            client.todo.create(
                 title="New Todo", meeting_id=1, due_date="2024-06-15"
             )
-            Todo(id=1, name='New Todo', due_date='2024-06-15', ...)
+            # Returns: Todo(id=1, name='New Todo', due_date='2024-06-15', ...)
+            ```
         """
         if user_id is None:
             user_id = self.user_id
@@ -134,8 +138,10 @@ class TodoOperations(BaseOperations):
             True if the operation was successful
 
         Example:
-            >>> client.todo.complete(1)
-            True
+            ```python
+            client.todo.complete(1)
+            # Returns: True
+            ```
         """
         response = self._client.post(f"todo/{todo_id}/complete?status=true")
         response.raise_for_status()
@@ -162,10 +168,12 @@ class TodoOperations(BaseOperations):
             RuntimeError: If the update request fails
 
         Example:
-            >>> client.todo.update(
+            ```python
+            client.todo.update(
                 todo_id=1, title="Updated Todo", due_date="2024-11-01"
             )
-            Todo(id=1, name='Updated Todo', due_date='2024-11-01', ...)
+            # Returns: Todo(id=1, name='Updated Todo', due_date='2024-11-01', ...)
+            ```
         """
         payload: dict[str, Any] = {}
 
@@ -207,8 +215,10 @@ class TodoOperations(BaseOperations):
             RuntimeError: If the request to retrieve the todo details fails
 
         Example:
-            >>> client.todo.details(1)
-            Todo(id=1, name='Updated Todo', due_date='2024-11-01', ...)
+            ```python
+            client.todo.details(1)
+            # Returns: Todo(id=1, name='Updated Todo', due_date='2024-11-01', ...)
+            ```
         """
         response = self._client.get(f"todo/{todo_id}")
 

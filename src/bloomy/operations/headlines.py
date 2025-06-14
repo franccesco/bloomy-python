@@ -135,18 +135,20 @@ class HeadlineOperations(BaseOperations):
             httpx.HTTPStatusError: If the API request fails
 
         Example:
-            >>> client.headline.list()
-            [
-                HeadlineListItem(
-                    id=1,
-                    title='Headline Title',
-                    meeting_details=MeetingInfo(id=1, title='Team Meeting'),
-                    owner_details=OwnerDetails(id=1, name='John Doe'),
-                    archived=False,
-                    created_at='2023-01-01',
-                    closed_at=None
-                )
-            ]
+            ```python
+            client.headline.list()
+            # Returns: [
+            #     HeadlineListItem(
+            #         id=1,
+            #         title='Headline Title',
+            #         meeting_details=MeetingInfo(id=1, title='Team Meeting'),
+            #         owner_details=OwnerDetails(id=1, name='John Doe'),
+            #         archived=False,
+            #         created_at='2023-01-01',
+            #         closed_at=None
+            #     )
+            # ]
+            ```
         """
         if user_id and meeting_id:
             raise ValueError("Please provide either user_id or meeting_id, not both.")

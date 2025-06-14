@@ -27,7 +27,9 @@ class Configuration:
                      environment variable or configuration file.
 
         Example:
-            >>> config = Bloomy.Configuration(api_key)
+            ```python
+            config = Bloomy.Configuration(api_key)
+            ```
         """
         self.api_key = api_key or os.environ.get("BG_API_KEY") or self._load_api_key()
 
@@ -47,9 +49,11 @@ class Configuration:
             passed.
 
         Example:
-            >>> config.configure_api_key("user", "pass", store_key=True)
-            >>> config.api_key
-            'xxxx...'
+            ```python
+            config.configure_api_key("user", "pass", store_key=True)
+            config.api_key
+            # Returns: 'xxxx...'
+            ```
         """
         self.api_key = self._fetch_api_key(username, password)
         if store_key:

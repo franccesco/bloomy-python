@@ -33,19 +33,23 @@ class GoalOperations(BaseOperations):
             Either:
             - A list of GoalInfo model instances if archived is false
             - A GoalListResponse model with 'active' and 'archived' lists of
-              GoalInfo instances if archived is true
+                GoalInfo instances if archived is true
 
         Examples:
             List active goals:
-            >>> client.goal.list()
-            [GoalInfo(id=1, title='Complete project', ...)]
+            ```python
+            client.goal.list()
+            # Returns: [GoalInfo(id=1, title='Complete project', ...)]
+            ```
 
             List both active and archived goals:
-            >>> client.goal.list(archived=True)
-            GoalListResponse(
-                active=[GoalInfo(id=1, ...)],
-                archived=[ArchivedGoalInfo(id=2, ...)]
-            )
+            ```python
+            client.goal.list(archived=True)
+            # Returns: GoalListResponse(
+            #     active=[GoalInfo(id=1, ...)],
+            #     archived=[ArchivedGoalInfo(id=2, ...)]
+            # )
+            ```
         """
         if user_id is None:
             user_id = self.user_id
@@ -97,8 +101,10 @@ class GoalOperations(BaseOperations):
             A CreatedGoalInfo model instance representing the newly created goal
 
         Example:
-            >>> client.goal.create(title="New Goal", meeting_id=1)
-            CreatedGoalInfo(id=1, title='New Goal', meeting_id=1, ...)
+            ```python
+            client.goal.create(title="New Goal", meeting_id=1)
+            # Returns: CreatedGoalInfo(id=1, title='New Goal', meeting_id=1, ...)
+            ```
         """
         if user_id is None:
             user_id = self.user_id
@@ -133,8 +139,10 @@ class GoalOperations(BaseOperations):
             True if deletion was successful
 
         Example:
-            >>> client.goal.delete(1)
-            True
+            ```python
+            client.goal.delete(1)
+            # Returns: True
+            ```
         """
         response = self._client.delete(f"rocks/{goal_id}")
         response.raise_for_status()
@@ -163,8 +171,10 @@ class GoalOperations(BaseOperations):
             ValueError: If an invalid status value is provided
 
         Example:
-            >>> client.goal.update(goal_id=1, title="Updated Goal", status='on')
-            True
+            ```python
+            client.goal.update(goal_id=1, title="Updated Goal", status='on')
+            # Returns: True
+            ```
         """
         if accountable_user is None:
             accountable_user = self.user_id
@@ -197,8 +207,10 @@ class GoalOperations(BaseOperations):
             True if the archival was successful, False otherwise
 
         Example:
-            >>> goals.archive(123)
-            True
+            ```python
+            goals.archive(123)
+            # Returns: True
+            ```
         """
         response = self._client.put(f"rocks/{goal_id}/archive")
         response.raise_for_status()
@@ -214,8 +226,10 @@ class GoalOperations(BaseOperations):
             True if the restore operation was successful, False otherwise
 
         Example:
-            >>> goals.restore(123)
-            True
+            ```python
+            goals.restore(123)
+            # Returns: True
+            ```
         """
         response = self._client.put(f"rocks/{goal_id}/restore")
         response.raise_for_status()
@@ -231,9 +245,11 @@ class GoalOperations(BaseOperations):
             A list of ArchivedGoalInfo model instances containing archived goal details
 
         Example:
-            >>> goal._get_archived_goals()
-            [ArchivedGoalInfo(id=1, title='Archived Goal',
-                              created_at='2024-06-10', ...), ...]
+            ```python
+            goal._get_archived_goals()
+            # Returns: [ArchivedGoalInfo(id=1, title='Archived Goal',
+            #                           created_at='2024-06-10', ...), ...]
+            ```
         """
         if user_id is None:
             user_id = self.user_id
