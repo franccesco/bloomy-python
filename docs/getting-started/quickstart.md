@@ -89,13 +89,14 @@ todos = client.todo.list()
 open_todos = [t for t in todos if not t.complete]
 print(f"You have {len(open_todos)} open todos")
 
-# Create a new todo
+# Create a new todo (requires meeting_id)
 new_todo = client.todo.create(
     title="Complete quarterly review",
+    meeting_id=meeting_id,  # Required parameter
     due_date="2024-12-31",
     notes="Review all Q4 metrics and prepare summary"
 )
-print(f"Created todo: {new_todo.title} (ID: {new_todo.id})")
+print(f"Created todo: {new_todo.name} (ID: {new_todo.id})")
 ```
 
 ### Working with Goals (Rocks)
@@ -106,11 +107,10 @@ goals = client.goal.list()
 for goal in goals:
     print(f"Goal: {goal.name} - {goal.status}")
 
-# Create a new goal
+# Create a new goal (requires meeting_id)
 new_goal = client.goal.create(
     title="Launch new product feature",
-    due_date="2025-03-31",
-    status="on_track"
+    meeting_id=meeting_id  # Required parameter
 )
 ```
 
@@ -129,8 +129,8 @@ print(f"Meeting has {len(attendees)} attendees")
 headline = client.headline.create(
     meeting_id=meeting_id,
     title="Team exceeded Q4 sales target by 15%",
-    notes="Great job everyone!",
-    type="good"
+    notes="Great job everyone!"
+    # owner_id defaults to current user
 )
 ```
 

@@ -53,8 +53,8 @@ class HeadlineOperations(BaseOperations):
         return HeadlineInfo(
             id=data["Id"],
             title=data["Name"],
-            owner_details=OwnerDetails(id=data["OwnerId"], name=None),
-            notes_url=data["DetailsUrl"],
+            owner_details=OwnerDetails(id=owner_id, name=None),
+            notes_url=data.get("DetailsUrl", ""),
         )
 
     def update(self, headline_id: int, title: str) -> bool:

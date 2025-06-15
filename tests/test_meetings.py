@@ -208,7 +208,8 @@ class TestMeetingOperations:
 
         meeting_ops = MeetingOperations(mock_http_client)
 
-        with pytest.raises(ValueError) as exc_info:
+        from bloomy.exceptions import APIError
+        with pytest.raises(APIError) as exc_info:
             meeting_ops.details(meeting_id=999)
 
         assert "Meeting with ID 999 not found" in str(exc_info.value)

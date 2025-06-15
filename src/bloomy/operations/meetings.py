@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 from typing import Any
 
+from ..exceptions import APIError
 from ..models import (
     Issue,
     MeetingAttendee,
@@ -228,7 +229,7 @@ class MeetingOperations(BaseOperations):
         meeting = next((m for m in meetings if m.id == meeting_id), None)
 
         if not meeting:
-            raise ValueError(f"Meeting with ID {meeting_id} not found")
+            raise APIError(f"Meeting with ID {meeting_id} not found", status_code=404)
 
         return MeetingDetails(
             id=meeting.id,
