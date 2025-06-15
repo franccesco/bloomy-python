@@ -4,11 +4,16 @@ This guide will help you get started with the Bloomy Python SDK in just a few mi
 
 ## Step 1: Get Your API Key
 
-First, you'll need an API key from Bloom Growth:
+First, you'll need an API key from Bloom Growth. You can obtain it using the Token endpoint:
 
-1. Log in to your [Bloom Growth account](https://app.bloomgrowth.com)
-2. Navigate to Settings → API
-3. Generate a new API key or copy your existing one
+```bash
+curl -i -X POST -d "grant_type=password" \
+  -d "userName=YOUR_USERNAME_HERE" \
+  -d "password=YOUR_PASSWORD_HERE" \
+  'https://app.bloomgrowth.com/Token'
+```
+
+The response will include an `access_token` field which is your API key.
 
 ## Step 2: Configure Authentication
 
