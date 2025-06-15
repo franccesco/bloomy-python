@@ -26,13 +26,13 @@ uv add bloomy
 To install the latest development version from GitHub:
 
 ```bash
-pip install git+https://github.com/yourusername/bloomy-python.git
+pip install git+https://github.com/franccesco/bloomy-python.git
 ```
 
 Or clone the repository and install locally:
 
 ```bash
-git clone https://github.com/yourusername/bloomy-python.git
+git clone https://github.com/franccesco/bloomy-python.git
 cd bloomy-python
 pip install -e .
 ```

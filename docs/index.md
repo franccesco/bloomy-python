@@ -58,4 +58,4 @@ uv add bloomy-python
 - [Installation Guide](getting-started/installation.md) - Detailed installation instructions
 - [Quick Start](getting-started/quickstart.md) - Get up and running quickly
 - [API Reference](api/client.md) - Complete API documentation
-- [GitHub Repository](https://github.com/yourusername/bloomy-python) - Source code and issue tracking
+- [GitHub Repository](https://github.com/franccesco/bloomy-python) - Source code and issue tracking
