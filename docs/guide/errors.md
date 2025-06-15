@@ -117,7 +117,7 @@ def get_user_safely(client, user_id):
 # Usage
 user = get_user_safely(client, 12345)
 if user:
-    print(f"Found user: {user['name']}")
+    print(f"Found user: {user.name}")
 else:
     print("User not found")
 ```
@@ -321,9 +321,10 @@ def create_client_with_refresh():
         except APIError as e:
             if e.status_code == 401:
                 # Re-authenticate
-                config.configure(
+                config.configure_api_key(
                     username=os.getenv("BLOOMY_USERNAME"),
-                    password=os.getenv("BLOOMY_PASSWORD")
+                    password=os.getenv("BLOOMY_PASSWORD"),
+                    store_key=True
                 )
                 # Create new client with fresh token
                 new_client = Client()

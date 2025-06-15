@@ -18,14 +18,14 @@ client = Client(api_key="your-api-key-here")
 
 ### 2. Environment Variable
 
-Set the `BLOOMY_API_KEY` environment variable:
+Set the `BG_API_KEY` environment variable:
 
 ```bash
 # Linux/macOS
-export BLOOMY_API_KEY="your-api-key-here"
+export BG_API_KEY="your-api-key-here"
 
 # Windows
-set BLOOMY_API_KEY=your-api-key-here
+set BG_API_KEY=your-api-key-here
 ```
 
 Then initialize the client without parameters:
@@ -33,7 +33,7 @@ Then initialize the client without parameters:
 ```python
 from bloomy import Client
 
-client = Client()  # Automatically uses BLOOMY_API_KEY
+client = Client()  # Automatically uses BG_API_KEY
 ```
 
 **Best for**: Production applications, CI/CD pipelines
@@ -47,9 +47,10 @@ from bloomy import Configuration
 
 # Initial setup - fetches and saves API key
 config = Configuration()
-config.configure(
+config.configure_api_key(
     username="your-email@example.com",
-    password="your-password"
+    password="your-password",
+    store_key=True
 )
 
 # Future usage - automatically loads saved API key
@@ -70,7 +71,7 @@ api_key: your-api-key-here
 When initializing a client, the SDK checks for credentials in this order:
 
 1. Direct `api_key` parameter
-2. `BLOOMY_API_KEY` environment variable
+2. `BG_API_KEY` environment variable
 3. Configuration file (`~/.bloomy/config.yaml`)
 
 The first valid API key found is used.
@@ -83,41 +84,31 @@ The first valid API key found is used.
 from bloomy import Configuration
 
 config = Configuration()
-print(f"Config file: {config.config_path}")
-print(f"Has API key: {config.has_api_key()}")
+print(f"Has API key: {config.api_key is not None}")
 ```
 
 ### Update Configuration
 
 ```python
 # Update with new credentials
-config.configure(
+config.configure_api_key(
     username="new-email@example.com",
-    password="new-password"
+    password="new-password",
+    store_key=True
 )
 
-# Or set API key directly
-config.api_key = "new-api-key"
-config.save()
+# Or set API key directly and store it
+config = Configuration(api_key="new-api-key")
+config._store_api_key()  # Store to config file
 ```
 
 ### Clear Configuration
 
-```python
+```bash
 # Remove stored credentials
-config.clear()
+rm ~/.bloomy/config.yaml
 ```
 
-## Custom Base URL
-
-For testing or using a different API endpoint:
-
-```python
-client = Client(
-    api_key="your-api-key",
-    base_url="https://custom-api.example.com/api/v1"
-)
-```
 
 ## Security Best Practices
 
@@ -136,7 +127,7 @@ client = Client(
 
 If you see `BloomyError: No API key provided`, check:
 
-1. Spelling of environment variable (`BLOOMY_API_KEY`)
+1. Spelling of environment variable (`BG_API_KEY`)
 2. Configuration file exists at `~/.bloomy/config.yaml`
 3. API key is properly formatted
 
@@ -146,7 +137,7 @@ If authentication fails:
 
 1. Verify API key is correct and active
 2. Check if your account has API access enabled
-3. Ensure you're using the correct base URL
+3. Ensure your API key is valid
 
 ### Configuration File Issues
 

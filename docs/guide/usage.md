@@ -164,7 +164,7 @@ goal = client.goal.create(
 # Update goal status
 success = client.goal.update(
     goal_id=goal.id,
-    status="complete"  # Options: "on", "off", "at_risk", "complete"
+    status="complete"  # Options: "on", "off", "complete"
 )
 print(f"Goal updated: {success}")  # Returns True if successful
 ```

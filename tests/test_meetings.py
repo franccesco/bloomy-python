@@ -209,6 +209,7 @@ class TestMeetingOperations:
         meeting_ops = MeetingOperations(mock_http_client)
 
         from bloomy.exceptions import APIError
+
         with pytest.raises(APIError) as exc_info:
             meeting_ops.details(meeting_id=999)
 
