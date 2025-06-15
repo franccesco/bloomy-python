@@ -4,22 +4,29 @@ The Bloomy SDK uses API key authentication for all requests to the Bloom Growth 
 
 ## Obtaining an API Key
 
-### Via Bloom Growth Web Interface
+You can obtain an API key using the Token endpoint:
 
-1. Log in to [Bloom Growth](https://app.bloomgrowth.com)
-2. Navigate to **Settings** → **API**
-3. Click **Generate New API Key**
-4. Copy and securely store your API key
+```bash
+curl -i -X POST -d "grant_type=password" \
+  -d "userName=YOUR_USERNAME_HERE" \
+  -d "password=YOUR_PASSWORD_HERE" \
+  'https://app.bloomgrowth.com/Token'
+```
+
+The response will include an `access_token` field which is your API key.
 
 ### Via SDK (Using Username/Password)
+
+You can also use the SDK to fetch and store your API key:
 
 ```python
 from bloomy import Configuration
 
 config = Configuration()
-config.configure(
+config.configure_api_key(
     username="your-email@example.com",
-    password="your-password"
+    password="your-password",
+    store_key=True
 )
 
 # API key is now saved in ~/.bloomy/config.yaml
@@ -48,10 +55,10 @@ client = Client(api_key="your-api-key-here")
 
 ### Method 2: Environment Variable
 
-Set the `BLOOMY_API_KEY` environment variable:
+Set the `BG_API_KEY` environment variable:
 
 ```bash
-export BLOOMY_API_KEY="your-api-key-here"
+export BG_API_KEY="your-api-key-here"
 ```
 
 Use the client without parameters:
@@ -59,7 +66,7 @@ Use the client without parameters:
 ```python
 from bloomy import Client
 
-client = Client()  # Uses BLOOMY_API_KEY automatically
+client = Client()  # Uses BG_API_KEY automatically
 ```
 
 **Pros:**
@@ -80,9 +87,10 @@ from bloomy import Configuration, Client
 
 # First time setup
 config = Configuration()
-config.configure(
+config.configure_api_key(
     username="your-email@example.com",
-    password="your-password"
+    password="your-password",
+    store_key=True
 )
 
 # Subsequent usage
@@ -122,9 +130,9 @@ import os
 from bloomy import Client
 
 # Fail fast if not configured
-api_key = os.environ.get("BLOOMY_API_KEY")
+api_key = os.environ.get("BG_API_KEY")
 if not api_key:
-    raise ValueError("BLOOMY_API_KEY environment variable is required")
+    raise ValueError("BG_API_KEY environment variable is required")
 
 client = Client(api_key=api_key)
 ```
@@ -148,9 +156,9 @@ from bloomy import Client
 
 # Use different keys for different environments
 if os.getenv("ENVIRONMENT") == "production":
-    api_key = os.getenv("BLOOMY_API_KEY_PROD")
+    api_key = os.getenv("BG_API_KEY_PROD")
 else:
-    api_key = os.getenv("BLOOMY_API_KEY_DEV")
+    api_key = os.getenv("BG_API_KEY_DEV")
 
 client = Client(api_key=api_key)
 ```
@@ -165,9 +173,10 @@ import time
 def rotate_api_key():
     config = Configuration()
     # Fetch new key using current credentials
-    config.configure(
+    config.configure_api_key(
         username=os.getenv("BLOOMY_USERNAME"),
-        password=os.getenv("BLOOMY_PASSWORD")
+        password=os.getenv("BLOOMY_PASSWORD"),
+        store_key=True
     )
     print("API key rotated successfully")
 
@@ -230,7 +239,7 @@ print("Configuration debugging:")
 print(f"Config file path: {config.config_path}")
 print(f"Config file exists: {config.config_path.exists()}")
 print(f"Has saved API key: {config.has_api_key()}")
-print(f"BLOOMY_API_KEY set: {'BLOOMY_API_KEY' in os.environ}")
+print(f"BG_API_KEY set: {'BG_API_KEY' in os.environ}")
 ```
 
 ## Multi-Account Support

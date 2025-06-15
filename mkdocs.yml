@@ -1,9 +1,9 @@
 site_name: Bloomy Python SDK
-site_url: https://github.com/fran/bloomy-python/
+site_url: https://github.com/franccesco/bloomy-python/
 site_description: Python SDK for Bloom Growth API
 site_author: Bloomy Contributors
 repo_name: bloomy-python
-repo_url: https://github.com/fran/bloomy-python
+repo_url: https://github.com/franccesco/bloomy-python
 edit_uri: edit/main/docs/
 
 theme:
@@ -112,9 +112,9 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/fran/bloomy-python
+      link: https://github.com/franccesco/bloomy-python
     - icon: fontawesome/brands/python
-      link: https://pypi.org/project/bloomy/
+      link: https://pypi.org/project/bloomy-python/
 
 copyright: |
-  &copy; 2024 <a href="https://github.com/fran/bloomy-python" target="_blank" rel="noopener">Bloomy Contributors</a>
+  &copy; 2024 <a href="https://github.com/franccesco/bloomy-python" target="_blank" rel="noopener">Bloomy Contributors</a>
