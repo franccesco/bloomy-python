@@ -1,11 +1,15 @@
 # Bloomy - Python SDK for Bloom Growth API
 
+![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
+[![Deploy Documentation](https://github.com/franccesco/bloomy-python/actions/workflows/docs.yml/badge.svg)](https://github.com/franccesco/bloomy-python/actions/workflows/docs.yml)
+
 A Python SDK for interacting with the Bloom Growth API, providing easy access to users, meetings, todos, goals, scorecards, issues, and headlines.
 
 ## Installation
 
 ```bash
-pip install bloomy
+pip install bloomy-python
 ```
 
 ## Quick Start
