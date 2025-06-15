@@ -334,7 +334,7 @@ class MeetingInfo(BloomyBaseModel):
     """Model for meeting information."""
 
     id: int
-    title: str
+    title: str | None = None
 
 
 class HeadlineInfo(BloomyBaseModel):

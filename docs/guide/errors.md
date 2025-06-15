@@ -21,7 +21,7 @@ from bloomy import Client, BloomyError
 
 try:
     client = Client(api_key="your-api-key")
-    user = client.user.me()
+    user = client.user.details()
 except BloomyError as e:
     print(f"Bloomy SDK error: {e}")
 ```
@@ -35,7 +35,7 @@ from bloomy import Client, APIError
 
 try:
     client = Client(api_key="invalid-key")
-    user = client.user.me()
+    user = client.user.details()
 except APIError as e:
     print(f"API error: {e.message}")
     print(f"Status code: {e.status_code}")
@@ -94,7 +94,7 @@ from bloomy import Client, APIError, ConfigurationError
 
 try:
     client = Client()
-    users = client.user.list()
+    users = client.user.all()
 except ConfigurationError:
     print("Please configure your API key")
 except APIError as e:
@@ -151,7 +151,7 @@ def retry_with_backoff(func, max_retries=3, initial_delay=1):
 
 # Usage
 client = Client(api_key="your-api-key")
-users = retry_with_backoff(lambda: client.user.list())
+users = retry_with_backoff(lambda: client.user.all())
 ```
 
 ### Graceful Degradation
@@ -169,7 +169,7 @@ class BloomyService:
     
     def get_current_user(self):
         try:
-            self._cached_user = self.client.user.me()
+            self._cached_user = self.client.user.details()
             return self._cached_user
         except APIError as e:
             logger.error(f"Failed to fetch user: {e}")
@@ -224,7 +224,7 @@ logger = logging.getLogger('bloomy_app')
 client = Client(api_key="your-api-key")
 
 try:
-    users = client.user.list()
+    users = client.user.all()
     logger.info(f"Successfully fetched {len(users)} users")
 except APIError as e:
     logger.error(
@@ -258,7 +258,7 @@ def handle_api_errors(default=None):
 
 # Usage
 with handle_api_errors(default=[]):
-    users = client.user.list()
+    users = client.user.all()
 ```
 
 ## Best Practices
@@ -302,7 +302,7 @@ from bloomy import Client
 
 try:
     client = Client(api_key="your-api-key")
-    users = client.user.list()
+    users = client.user.all()
 except httpx.TimeoutException:
     print("Request timed out. Please try again.")
 ```

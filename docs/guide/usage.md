@@ -33,7 +33,7 @@ Many list operations return all results at once. For large datasets, consider fi
 ```python
 # Get meetings for specific date range
 meetings = client.meeting.list()
-recent_meetings = [m for m in meetings if m['date'] >= '2024-01-01']
+recent_meetings = [m for m in meetings if m.id > 0]  # Example filter
 ```
 
 ### Filtering Results
@@ -43,11 +43,11 @@ Use Python's built-in filtering capabilities:
 ```python
 # Get only incomplete todos
 todos = client.todo.list()
-open_todos = [t for t in todos if not t['complete']]
+open_todos = [t for t in todos if not t.complete]
 
-# Get high-priority issues
+# Get issues for a meeting  
 issues = client.issue.list(meeting_id=meeting_id)
-critical_issues = [i for i in issues if i['priority'] == 'high']
+# Note: Issues don't have a priority field in the API
 ```
 
 ### Working with Dates
@@ -77,13 +77,11 @@ todo = client.todo.create(
 Process multiple items efficiently:
 
 ```python
-# Update multiple todos
+# Complete multiple todos
 todos_to_complete = client.todo.list()[:5]
 for todo in todos_to_complete:
-    client.todo.update(
-        todo_id=todo['id'],
-        complete=True
-    )
+    if not todo.complete:
+        client.todo.complete(todo.id)
 ```
 
 ### Error Recovery
@@ -105,7 +103,7 @@ def retry_operation(func, max_retries=3, delay=1):
             raise
 
 # Usage
-user = retry_operation(lambda: client.user.me())
+user = retry_operation(lambda: client.user.details())
 ```
 
 ### Custom Headers
@@ -124,13 +122,13 @@ client = Client(api_key="your-api-key")
 
 ```python
 # Get current user
-me = client.user.me()
+me = client.user.details()
 
 # Search for users
 users = client.user.search("John")
 
 # Get user's direct reports
-reports = client.user.direct_reports(user_id=me['id'])
+reports = client.user.direct_reports(user_id=me.id)
 ```
 
 ### Meetings
@@ -140,7 +138,7 @@ reports = client.user.direct_reports(user_id=me['id'])
 meetings = client.meeting.list()
 
 # Get meeting details with participants
-meeting_id = meetings[0]['id']
+meeting_id = meetings[0].id
 details = client.meeting.details(meeting_id)
 attendees = client.meeting.attendees(meeting_id)
 
@@ -152,34 +150,35 @@ issues = client.meeting.issues(meeting_id)
 ### Goals (Rocks)
 
 ```python
-# Create a quarterly goal
+# Create a quarterly goal (requires meeting_id)
 goal = client.goal.create(
     title="Increase customer satisfaction to 95%",
-    due_date="2024-12-31",
-    status="on_track"
+    meeting_id=meeting_id  # Required parameter
 )
 
-# Update progress
-client.goal.update(
-    goal_id=goal['id'],
-    status="complete",
-    completion_percent=100
+# Update goal status
+updated = client.goal.update(
+    goal_id=goal.id,
+    status="complete"  # Options: "on", "off", "at_risk", "complete"
 )
+print(f"Goal updated: {updated}")  # Returns updated goal dict
 ```
 
 ### Scorecard
 
 ```python
-# Get current week's scorecard
-scorecard = client.scorecard.week()
+# Get current week info
+current_week = client.scorecard.current_week()
+
+# Get scorecard items
+scorecard_items = client.scorecard.list()
 
 # Update a metric
-for metric in scorecard['metrics']:
-    if metric['title'] == "Sales Calls":
-        client.scorecard.update(
-            score_id=metric['id'],
-            value=45,
-            met_goal=True
+for item in scorecard_items:
+    if item.title == "Sales Calls":
+        client.scorecard.score(
+            measurable_id=item.measurable_id,
+            score=45
         )
 ```
 
