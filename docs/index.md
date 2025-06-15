@@ -28,8 +28,10 @@ for meeting in meetings:
     print(f"Meeting: {meeting.name}")
 
 # Create a todo
+meeting_id = meetings[0].id
 todo = client.todo.create(
     title="Review Q4 metrics",
+    meeting_id=meeting_id,
     due_date="2024-12-31"
 )
 ```
@@ -37,13 +39,13 @@ todo = client.todo.create(
 ## Installation
 
 ```bash
-pip install bloomy
+pip install bloomy-python
 ```
 
 Or with uv:
 
 ```bash
-uv add bloomy
+uv add bloomy-python
 ```
 
 ## Requirements

@@ -20,7 +20,7 @@ For automatic resource cleanup:
 ```python
 with Client(api_key="your-api-key") as client:
     # Use client here
-    users = client.user.list()
+    users = client.user.all()
 # Connection automatically closed
 ```
 
@@ -47,7 +47,7 @@ open_todos = [t for t in todos if not t.complete]
 
 # Get issues for a meeting  
 issues = client.issue.list(meeting_id=meeting_id)
-# Note: Issues don't have a priority field in the API
+# Filter by other criteria as needed
 ```
 
 ### Working with Dates
@@ -56,9 +56,13 @@ The SDK accepts date strings in ISO format:
 
 ```python
 # Create todo with due date
+meetings = client.meeting.list()
+meeting_id = meetings[0].id
+
 todo = client.todo.create(
     title="Complete project",
-    due_date="2024-12-31"  # YYYY-MM-DD format
+    meeting_id=meeting_id,
+    due_date="2024-12-31"
 )
 
 # Date parsing is handled automatically
@@ -66,6 +70,7 @@ from datetime import datetime, timedelta
 tomorrow = (datetime.now() + timedelta(days=1)).date().isoformat()
 todo = client.todo.create(
     title="Tomorrow's task",
+    meeting_id=meeting_id,
     due_date=tomorrow
 )
 ```
@@ -157,11 +162,11 @@ goal = client.goal.create(
 )
 
 # Update goal status
-updated = client.goal.update(
+success = client.goal.update(
     goal_id=goal.id,
     status="complete"  # Options: "on", "off", "at_risk", "complete"
 )
-print(f"Goal updated: {updated}")  # Returns updated goal dict
+print(f"Goal updated: {success}")  # Returns True if successful
 ```
 
 ### Scorecard

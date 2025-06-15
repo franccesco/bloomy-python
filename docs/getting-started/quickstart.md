@@ -90,9 +90,10 @@ open_todos = [t for t in todos if not t.complete]
 print(f"You have {len(open_todos)} open todos")
 
 # Create a new todo (requires meeting_id)
+meeting_id = meetings[0].id
 new_todo = client.todo.create(
     title="Complete quarterly review",
-    meeting_id=meeting_id,  # Required parameter
+    meeting_id=meeting_id,
     due_date="2024-12-31",
     notes="Review all Q4 metrics and prepare summary"
 )
@@ -105,12 +106,13 @@ print(f"Created todo: {new_todo.name} (ID: {new_todo.id})")
 # List your active goals
 goals = client.goal.list()
 for goal in goals:
-    print(f"Goal: {goal.name} - {goal.status}")
+    print(f"Goal: {goal.title} - {goal.status}")
 
 # Create a new goal (requires meeting_id)
+meeting_id = meetings[0].id
 new_goal = client.goal.create(
     title="Launch new product feature",
-    meeting_id=meeting_id  # Required parameter
+    meeting_id=meeting_id
 )
 ```
 
@@ -130,7 +132,6 @@ headline = client.headline.create(
     meeting_id=meeting_id,
     title="Team exceeded Q4 sales target by 15%",
     notes="Great job everyone!"
-    # owner_id defaults to current user
 )
 ```
 
