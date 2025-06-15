@@ -1,6 +1,6 @@
 # Bloomy Python SDK
 
-A Python SDK for interacting with the [Bloom Growth](https://www.bloomgrowth.com/) (EOS® Simple) API.
+A Python SDK for interacting with the [Bloom Growth](https://www.bloomgrowth.com/) API.
 
 ## Features
 

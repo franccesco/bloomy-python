@@ -1,6 +1,6 @@
 site_name: Bloomy Python SDK
 site_url: https://github.com/fran/bloomy-python/
-site_description: Python SDK for Bloom Growth (EOS® Simple) API
+site_description: Python SDK for Bloom Growth API
 site_author: Bloomy Contributors
 repo_name: bloomy-python
 repo_url: https://github.com/fran/bloomy-python
