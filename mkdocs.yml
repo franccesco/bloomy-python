@@ -95,9 +95,11 @@ nav:
   - User Guide:
       - Authentication: guide/authentication.md
       - Basic Usage: guide/usage.md
+      - Async Support: guide/async.md
       - Error Handling: guide/errors.md
   - API Reference:
       - Client: api/client.md
+      - AsyncClient: api/async_client.md
       - Operations:
           - Users: api/operations/users.md
           - Meetings: api/operations/meetings.md
@@ -106,6 +108,10 @@ nav:
           - Scorecard: api/operations/scorecard.md
           - Issues: api/operations/issues.md
           - Headlines: api/operations/headlines.md
+      - Async Operations:
+          - Users: api/async_operations/users.md
+          - Meetings: api/async_operations/meetings.md
+          - Todos: api/async_operations/todos.md
       - Configuration: api/configuration.md
       - Exceptions: api/exceptions.md
 

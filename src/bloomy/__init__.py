@@ -2,6 +2,7 @@
 
 import importlib.metadata
 
+from .async_client import AsyncClient
 from .client import Client
 from .configuration import Configuration
 from .exceptions import APIError, BloomyError
@@ -42,6 +43,7 @@ try:
 except importlib.metadata.PackageNotFoundError:
     __version__ = "unknown"
 __all__ = [
+    "AsyncClient",
     "Client",
     "Configuration",
     "APIError",

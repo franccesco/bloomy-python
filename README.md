@@ -5,6 +5,8 @@
 
 A Python SDK for interacting with the Bloom Growth API, providing easy access to users, meetings, todos, goals, scorecards, issues, and headlines.
 
+✨ **New in v0.13.0**: Full async/await support with `AsyncClient` for better performance in async applications!
+
 ## Installation
 
 ```bash
@@ -12,6 +14,8 @@ pip install bloomy-python
 ```
 
 ## Quick Start
+
+### Synchronous Client
 
 ```python
 from bloomy import Client
@@ -28,6 +32,22 @@ from bloomy import Configuration
 config = Configuration()
 config.configure_api_key("username", "password", store_key=True)
 client = Client()
+```
+
+### Asynchronous Client
+
+```python
+import asyncio
+from bloomy import AsyncClient
+
+async def main():
+    # Use async client for better performance
+    async with AsyncClient(api_key="your-api-key-here") as client:
+        user = await client.user.details()
+        meetings = await client.meeting.list()
+        print(f"Hello {user.name}, you have {len(meetings)} meetings")
+
+asyncio.run(main())
 ```
 
 ## Features

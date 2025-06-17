@@ -309,7 +309,7 @@ class IssueListItem(BloomyBaseModel):
     notes_url: str
     created_at: str
     meeting_id: int
-    meeting_title: str
+    meeting_title: str | None
 
 
 class CreatedIssue(BloomyBaseModel):

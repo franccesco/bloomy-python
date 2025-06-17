@@ -67,22 +67,46 @@ client = Client()
 
 Let's verify everything is working by fetching your user information:
 
-```python
-from bloomy import Client
+=== "Sync"
 
-# Initialize client
-client = Client(api_key="your-api-key")
+    ```python
+    from bloomy import Client
 
-# Get current user
-me = client.user.details()
-print(f"Logged in as: {me.name}")
+    # Initialize client
+    client = Client(api_key="your-api-key")
 
-# List your meetings
-meetings = client.meeting.list()
-print(f"\nYou have {len(meetings)} meetings:")
-for meeting in meetings[:5]:  # Show first 5
-    print(f"  - {meeting.name}")
-```
+    # Get current user
+    me = client.user.details()
+    print(f"Logged in as: {me.name}")
+
+    # List your meetings
+    meetings = client.meeting.list()
+    print(f"\nYou have {len(meetings)} meetings:")
+    for meeting in meetings[:5]:  # Show first 5
+        print(f"  - {meeting.name}")
+    ```
+
+=== "Async"
+
+    ```python
+    import asyncio
+    from bloomy import AsyncClient
+
+    async def main():
+        # Initialize async client
+        async with AsyncClient(api_key="your-api-key") as client:
+            # Get current user
+            me = await client.user.details()
+            print(f"Logged in as: {me.name}")
+
+            # List your meetings
+            meetings = await client.meeting.list()
+            print(f"\nYou have {len(meetings)} meetings:")
+            for meeting in meetings[:5]:  # Show first 5
+                print(f"  - {meeting.name}")
+
+    asyncio.run(main())
+    ```
 
 ## Step 4: Explore Common Operations
 
@@ -142,16 +166,33 @@ headline = client.headline.create(
 
 ## Using Context Managers
 
-The client supports context managers for automatic resource cleanup:
+Both clients support context managers for automatic resource cleanup:
 
-```python
-from bloomy import Client
+=== "Sync"
 
-with Client(api_key="your-api-key") as client:
-    user = client.user.details()
-    meetings = client.meeting.list()
-    # Client automatically closes when exiting the context
-```
+    ```python
+    from bloomy import Client
+
+    with Client(api_key="your-api-key") as client:
+        user = client.user.details()
+        meetings = client.meeting.list()
+        # Client automatically closes when exiting the context
+    ```
+
+=== "Async"
+
+    ```python
+    import asyncio
+    from bloomy import AsyncClient
+
+    async def main():
+        async with AsyncClient(api_key="your-api-key") as client:
+            user = await client.user.details()
+            meetings = await client.meeting.list()
+            # Client automatically closes when exiting the context
+
+    asyncio.run(main())
+    ```
 
 ## Error Handling
 

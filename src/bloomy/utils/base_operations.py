@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .abstract_operations import AbstractOperations
+
 if TYPE_CHECKING:
     import httpx
 
 
-class BaseOperations:
+class BaseOperations(AbstractOperations):
     """Base class for all API operation classes."""
 
     def __init__(self, client: httpx.Client) -> None:
@@ -17,8 +19,8 @@ class BaseOperations:
         Args:
             client: The HTTP client to use for API requests.
         """
-        self._client = client
-        self._user_id: int | None = None
+        super().__init__(client)
+        self._client: httpx.Client = client
 
     @property
     def user_id(self) -> int:

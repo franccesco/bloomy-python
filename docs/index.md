@@ -8,33 +8,64 @@ A Python SDK for interacting with the [Bloom Growth](https://www.bloomgrowth.com
 - **Comprehensive Coverage** - Access to users, meetings, todos, goals, scorecards, issues, and headlines
 - **Type Safety** - Full type annotations for better IDE support and code reliability
 - **Pythonic API** - Intuitive, Python-friendly interface with proper error handling
-- **Async Support** - Built on httpx for modern async/await patterns
+- **Async Support** - Full async/await support with dedicated AsyncClient for modern Python applications
 
 ## Quick Example
 
-```python
-from bloomy import Client
+=== "Sync"
 
-# Initialize the client
-client = Client(api_key="your-api-key")
+    ```python
+    from bloomy import Client
 
-# Get current user
-user = client.user.details()
-print(f"Hello, {user.name}!")
+    # Initialize the client
+    client = Client(api_key="your-api-key")
 
-# List meetings
-meetings = client.meeting.list()
-for meeting in meetings:
-    print(f"Meeting: {meeting.name}")
+    # Get current user
+    user = client.user.details()
+    print(f"Hello, {user.name}!")
 
-# Create a todo
-meeting_id = meetings[0].id
-todo = client.todo.create(
-    title="Review Q4 metrics",
-    meeting_id=meeting_id,
-    due_date="2024-12-31"
-)
-```
+    # List meetings
+    meetings = client.meeting.list()
+    for meeting in meetings:
+        print(f"Meeting: {meeting.name}")
+
+    # Create a todo
+    meeting_id = meetings[0].id
+    todo = client.todo.create(
+        title="Review Q4 metrics",
+        meeting_id=meeting_id,
+        due_date="2024-12-31"
+    )
+    ```
+
+=== "Async"
+
+    ```python
+    import asyncio
+    from bloomy import AsyncClient
+
+    async def main():
+        # Initialize the async client
+        async with AsyncClient(api_key="your-api-key") as client:
+            # Get current user
+            user = await client.user.details()
+            print(f"Hello, {user.name}!")
+
+            # List meetings
+            meetings = await client.meeting.list()
+            for meeting in meetings:
+                print(f"Meeting: {meeting.name}")
+
+            # Create a todo
+            meeting_id = meetings[0].id
+            todo = await client.todo.create(
+                title="Review Q4 metrics",
+                meeting_id=meeting_id,
+                due_date="2024-12-31"
+            )
+
+    asyncio.run(main())
+    ```
 
 ## Installation
 
