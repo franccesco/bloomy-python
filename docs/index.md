@@ -8,7 +8,7 @@ A Python SDK for interacting with the [Bloom Growth](https://www.bloomgrowth.com
 - **Comprehensive Coverage** - Access to users, meetings, todos, goals, scorecards, issues, and headlines
 - **Type Safety** - Full type annotations for better IDE support and code reliability
 - **Pythonic API** - Intuitive, Python-friendly interface with proper error handling
-- **Async Support** - Full async/await support with dedicated AsyncClient for modern Python applications
+- **Full Async Support** - Complete async/await support for all operations with dedicated AsyncClient for modern Python applications
 
 ## Quick Example
 

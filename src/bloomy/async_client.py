@@ -12,7 +12,11 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from .operations.async_ import (
+        AsyncGoalOperations,
+        AsyncHeadlineOperations,
+        AsyncIssueOperations,
         AsyncMeetingOperations,
+        AsyncScorecardOperations,
         AsyncTodoOperations,
         AsyncUserOperations,
     )
@@ -21,7 +25,8 @@ if TYPE_CHECKING:
 class AsyncClient:
     """Asynchronous client for interacting with the Bloomy API.
 
-    This client provides async access to all Bloomy API operations.
+    This client provides async access to all Bloomy API operations including
+    users, meetings, todos, goals, headlines, issues, and scorecards.
 
     Args:
         api_key: The API key for authentication. If not provided, it will be loaded
@@ -77,13 +82,23 @@ class AsyncClient:
         )
 
         # Lazy imports to avoid circular dependencies
+        from .operations.async_.goals import AsyncGoalOperations
+        from .operations.async_.headlines import AsyncHeadlineOperations
+        from .operations.async_.issues import AsyncIssueOperations
         from .operations.async_.meetings import AsyncMeetingOperations
+        from .operations.async_.scorecard import AsyncScorecardOperations
         from .operations.async_.todos import AsyncTodoOperations
         from .operations.async_.users import AsyncUserOperations
 
         self.user: AsyncUserOperations = AsyncUserOperations(self._client)
         self.meeting: AsyncMeetingOperations = AsyncMeetingOperations(self._client)
         self.todo: AsyncTodoOperations = AsyncTodoOperations(self._client)
+        self.goal: AsyncGoalOperations = AsyncGoalOperations(self._client)
+        self.headline: AsyncHeadlineOperations = AsyncHeadlineOperations(self._client)
+        self.issue: AsyncIssueOperations = AsyncIssueOperations(self._client)
+        self.scorecard: AsyncScorecardOperations = AsyncScorecardOperations(
+            self._client
+        )
 
     async def __aenter__(self) -> AsyncClient:
         """Enter the async context manager."""

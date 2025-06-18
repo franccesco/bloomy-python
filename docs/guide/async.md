@@ -61,6 +61,31 @@ async with AsyncClient(api_key="your-api-key") as client:
         title="Review async code",
         meeting_id=meeting_id
     )
+    
+    # Goal operations
+    goals = await client.goal.list()
+    new_goal = await client.goal.create(
+        title="Complete Q1 objectives",
+        meeting_id=meeting_id
+    )
+    
+    # Headline operations
+    headlines = await client.headline.list()
+    new_headline = await client.headline.create(
+        meeting_id=meeting_id,
+        title="Product launch successful"
+    )
+    
+    # Issue operations
+    issues = await client.issue.list()
+    new_issue = await client.issue.create(
+        meeting_id=meeting_id,
+        title="Server performance degradation"
+    )
+    
+    # Scorecard operations
+    scorecards = await client.scorecard.list()
+    current_week = await client.scorecard.current_week()
 ```
 
 ## Concurrent Operations
