@@ -18,6 +18,7 @@ class GoalOperations(BaseOperations):
     Note:
         This class is already initialized via the client and usable as
         `client.goal.method`
+
     """
 
     def list(
@@ -50,6 +51,7 @@ class GoalOperations(BaseOperations):
             #     archived=[ArchivedGoalInfo(id=2, ...)]
             # )
             ```
+
         """
         if user_id is None:
             user_id = self.user_id
@@ -60,25 +62,22 @@ class GoalOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        active_goals: list[GoalInfo] = []
-        for goal in data:
-            active_goals.append(
-                GoalInfo(
-                    id=goal["Id"],
-                    user_id=goal["Owner"]["Id"],
-                    user_name=goal["Owner"]["Name"],
-                    title=goal["Name"],
-                    created_at=goal["CreateTime"],
-                    due_date=goal["DueDate"],
-                    status="Completed" if goal.get("Complete") else "Incomplete",
-                    meeting_id=goal["Origins"][0]["Id"]
-                    if goal.get("Origins")
-                    else None,
-                    meeting_title=goal["Origins"][0]["Name"]
-                    if goal.get("Origins")
-                    else None,
-                )
+        active_goals: list[GoalInfo] = [
+            GoalInfo(
+                id=goal["Id"],
+                user_id=goal["Owner"]["Id"],
+                user_name=goal["Owner"]["Name"],
+                title=goal["Name"],
+                created_at=goal["CreateTime"],
+                due_date=goal["DueDate"],
+                status="Completed" if goal.get("Complete") else "Incomplete",
+                meeting_id=goal["Origins"][0]["Id"] if goal.get("Origins") else None,
+                meeting_title=(
+                    goal["Origins"][0]["Name"] if goal.get("Origins") else None
+                ),
             )
+            for goal in data
+        ]
 
         if archived:
             archived_goals = self._get_archived_goals(user_id)
@@ -105,6 +104,7 @@ class GoalOperations(BaseOperations):
             client.goal.create(title="New Goal", meeting_id=1)
             # Returns: CreatedGoalInfo(id=1, title='New Goal', meeting_id=1, ...)
             ```
+
         """
         if user_id is None:
             user_id = self.user_id
@@ -143,6 +143,7 @@ class GoalOperations(BaseOperations):
             client.goal.delete(1)
             # Returns: True
             ```
+
         """
         response = self._client.delete(f"rocks/{goal_id}")
         response.raise_for_status()
@@ -175,6 +176,7 @@ class GoalOperations(BaseOperations):
             client.goal.update(goal_id=1, title="Updated Goal", status='on')
             # Returns: True
             ```
+
         """
         if accountable_user is None:
             accountable_user = self.user_id
@@ -211,6 +213,7 @@ class GoalOperations(BaseOperations):
             goals.archive(123)
             # Returns: True
             ```
+
         """
         response = self._client.put(f"rocks/{goal_id}/archive")
         response.raise_for_status()
@@ -230,6 +233,7 @@ class GoalOperations(BaseOperations):
             goals.restore(123)
             # Returns: True
             ```
+
         """
         response = self._client.put(f"rocks/{goal_id}/restore")
         response.raise_for_status()
@@ -250,6 +254,7 @@ class GoalOperations(BaseOperations):
             # Returns: [ArchivedGoalInfo(id=1, title='Archived Goal',
             #                           created_at='2024-06-10', ...), ...]
             ```
+
         """
         if user_id is None:
             user_id = self.user_id

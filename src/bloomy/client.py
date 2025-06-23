@@ -35,6 +35,7 @@ class Client:
         client.issue.list()
         client.headline.list()
         ```
+
     """
 
     def __init__(self, api_key: str | None = None) -> None:
@@ -46,6 +47,7 @@ class Client:
 
         Raises:
             ValueError: If no API key is provided or found in configuration.
+
         """
         # Use Configuration class which handles priority:
         # 1. Explicit api_key parameter
@@ -83,7 +85,12 @@ class Client:
         self.headline = HeadlineOperations(self._client)
 
     def __enter__(self) -> Client:
-        """Context manager entry."""
+        """Context manager entry.
+
+        Returns:
+            The client instance.
+
+        """
         return self
 
     def __exit__(self, *args: Any) -> None:

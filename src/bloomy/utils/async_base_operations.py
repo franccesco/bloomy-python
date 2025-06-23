@@ -18,6 +18,7 @@ class AsyncBaseOperations(AbstractOperations):
 
         Args:
             client: The async HTTP client to use for API requests.
+
         """
         super().__init__(client)
         self._client: httpx.AsyncClient = client
@@ -27,6 +28,11 @@ class AsyncBaseOperations(AbstractOperations):
         """Get/set the user ID.
 
         For async operations, use get_user_id() to fetch from API.
+
+        Raises:
+            RuntimeError: If the user ID is not set. Use get_user_id() to fetch from
+                API.
+
         """
         if self._user_id is None:
             raise RuntimeError("User ID not set. Use get_user_id() to fetch from API.")
@@ -42,6 +48,7 @@ class AsyncBaseOperations(AbstractOperations):
 
         Returns:
             The user ID of the authenticated user.
+
         """
         if self._user_id is None:
             self._user_id = await self._get_default_user_id()
@@ -52,6 +59,7 @@ class AsyncBaseOperations(AbstractOperations):
 
         Returns:
             The user ID of the authenticated user.
+
         """
         response = await self._client.get("users/mine")
         response.raise_for_status()

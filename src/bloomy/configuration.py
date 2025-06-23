@@ -30,6 +30,7 @@ class Configuration:
             ```python
             config = Bloomy.Configuration(api_key)
             ```
+
         """
         self.api_key = api_key or os.environ.get("BG_API_KEY") or self._load_api_key()
 
@@ -54,6 +55,7 @@ class Configuration:
             config.api_key
             # Returns: 'xxxx...'
             ```
+
         """
         self.api_key = self._fetch_api_key(username, password)
         if store_key:
@@ -71,6 +73,7 @@ class Configuration:
 
         Raises:
             AuthenticationError: If authentication fails
+
         """
         with httpx.Client() as client:
             response = client.post(
@@ -98,6 +101,7 @@ class Configuration:
 
         Raises:
             ConfigurationError: If the API key is None
+
         """
         if self.api_key is None:
             raise ConfigurationError("API key is None")
@@ -114,6 +118,7 @@ class Configuration:
 
         Returns:
             The loaded API key or None if the file does not exist
+
         """
         config_file = self._config_file
         if not config_file.exists():

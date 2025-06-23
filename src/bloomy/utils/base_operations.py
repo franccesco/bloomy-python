@@ -18,6 +18,7 @@ class BaseOperations(AbstractOperations):
 
         Args:
             client: The HTTP client to use for API requests.
+
         """
         super().__init__(client)
         self._client: httpx.Client = client
@@ -28,6 +29,7 @@ class BaseOperations(AbstractOperations):
 
         Returns:
             The user ID of the authenticated user.
+
         """
         if self._user_id is None:
             self._user_id = self._get_default_user_id()
@@ -38,6 +40,7 @@ class BaseOperations(AbstractOperations):
 
         Returns:
             The user ID of the authenticated user.
+
         """
         response = self._client.get("users/mine")
         response.raise_for_status()

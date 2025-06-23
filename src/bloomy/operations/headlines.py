@@ -36,8 +36,6 @@ class HeadlineOperations(BaseOperations):
             A HeadlineInfo model instance containing id, title, owner_details,
             and notes_url
 
-        Raises:
-            httpx.HTTPStatusError: If the API request fails
         """
         if owner_id is None:
             owner_id = self.user_id
@@ -67,8 +65,6 @@ class HeadlineOperations(BaseOperations):
         Returns:
             True if update was successful
 
-        Raises:
-            httpx.HTTPStatusError: If the API request fails
         """
         payload = {"title": title}
         response = self._client.put(f"headline/{headline_id}", json=payload)
@@ -85,8 +81,6 @@ class HeadlineOperations(BaseOperations):
             A HeadlineDetails model instance containing id, title, notes_url,
             meeting_details, owner_details, archived, created_at, and closed_at
 
-        Raises:
-            httpx.HTTPStatusError: If the API request fails
         """
         response = self._client.get(
             f"headline/{headline_id}", params={"Include_Origin": "true"}
@@ -132,7 +126,6 @@ class HeadlineOperations(BaseOperations):
 
         Raises:
             ValueError: If both user_id and meeting_id are provided
-            httpx.HTTPStatusError: If the API request fails
 
         Example:
             ```python
@@ -149,6 +142,7 @@ class HeadlineOperations(BaseOperations):
             #     )
             # ]
             ```
+
         """
         if user_id and meeting_id:
             raise ValueError("Please provide either user_id or meeting_id, not both.")
@@ -191,8 +185,6 @@ class HeadlineOperations(BaseOperations):
         Returns:
             True if the deletion was successful
 
-        Raises:
-            httpx.HTTPStatusError: If the API request fails
         """
         response = self._client.delete(f"headline/{headline_id}")
         response.raise_for_status()

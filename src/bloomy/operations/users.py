@@ -27,6 +27,7 @@ class UserOperations(BaseOperations, UserOperationsMixin):
 
         Returns:
             A UserDetails model containing user details
+
         """
         if user_id is None:
             user_id = self.user_id
@@ -54,6 +55,7 @@ class UserOperations(BaseOperations, UserOperationsMixin):
 
         Returns:
             A list of DirectReport models containing direct report details
+
         """
         if user_id is None:
             user_id = self.user_id
@@ -72,6 +74,7 @@ class UserOperations(BaseOperations, UserOperationsMixin):
 
         Returns:
             A list of Position models containing position details
+
         """
         if user_id is None:
             user_id = self.user_id
@@ -90,6 +93,7 @@ class UserOperations(BaseOperations, UserOperationsMixin):
 
         Returns:
             A list of UserSearchResult models containing search results
+
         """
         response = self._client.get("search/user", params={"term": term})
         response.raise_for_status()
@@ -105,6 +109,7 @@ class UserOperations(BaseOperations, UserOperationsMixin):
 
         Returns:
             A list of UserListItem models containing user details
+
         """
         response = self._client.get("search/all", params={"term": "%"})
         response.raise_for_status()

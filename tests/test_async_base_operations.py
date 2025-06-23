@@ -11,6 +11,7 @@ class MockAsyncHTTPClient:
     """Mock async HTTP client for testing."""
 
     def __init__(self) -> None:
+        """Initialize mock async HTTP client with base URL and headers."""
         self.base_url = "https://app.bloomgrowth.com/api/v1"
         self.headers = {"Authorization": "Bearer test-token"}
         self.get = AsyncMock()

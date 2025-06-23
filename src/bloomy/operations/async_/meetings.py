@@ -27,6 +27,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
     Note:
         This class is already initialized via the client and usable as
         `client.meeting.method`
+
     """
 
     def __init__(self, client: httpx.AsyncClient) -> None:
@@ -34,6 +35,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
 
         Args:
             client: The async HTTP client to use for API requests.
+
         """
         super().__init__(client)
 
@@ -51,6 +53,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
             await client.meeting.list()
             # Returns: [MeetingListItem(id=123, name="Team Meeting", ...), ...]
             ```
+
         """
         if user_id is None:
             user_id = await self.get_user_id()
@@ -76,6 +79,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
             # Returns: [MeetingAttendee(user_id=1, name='John Doe',
             #          image_url='...'), ...]
             ```
+
         """
         response = await self._client.get(f"L10/{meeting_id}/attendees")
         response.raise_for_status()
@@ -101,6 +105,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
             # Returns: [Issue(id=1, name='Issue Title',
             #          created_at='2024-06-10', ...), ...]
             ```
+
         """
         response = await self._client.get(
             f"L10/{meeting_id}/issues",
@@ -128,6 +133,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
             await client.meeting.todos(1)
             # Returns: [Todo(id=1, name='Todo Title', due_date='2024-06-12', ...), ...]
             ```
+
         """
         response = await self._client.get(
             f"L10/{meeting_id}/todos",
@@ -153,6 +159,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
             # Returns: [ScorecardMetric(id=1, title='Sales', target=100.0,
             #           metric_type='>', unit='currency', ...), ...]
             ```
+
         """
         response = await self._client.get(f"L10/{meeting_id}/measurables")
         response.raise_for_status()
@@ -213,12 +220,16 @@ class AsyncMeetingOperations(AsyncBaseOperations):
         Returns:
             A MeetingDetails model instance with comprehensive meeting information
 
+        Raises:
+            APIError: If the meeting with the given ID is not found
+
         Example:
             ```python
             await client.meeting.details(1)
             # Returns: MeetingDetails(id=1, name='Team Meeting', attendees=[...],
             #                        issues=[...], todos=[...], metrics=[...])
             ```
+
         """
         meetings = await self.list()
         meeting = next((m for m in meetings if m.id == meeting_id), None)
@@ -274,6 +285,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
             await client.meeting.create("New Meeting", attendees=[2, 3])
             # Returns: {"meeting_id": 1, "title": "New Meeting", "attendees": [2, 3]}
             ```
+
         """
         if attendees is None:
             attendees = []
@@ -311,6 +323,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
             await client.meeting.delete(1)
             # Returns: True
             ```
+
         """
         response = await self._client.delete(f"L10/{meeting_id}")
         response.raise_for_status()

@@ -20,14 +20,24 @@ class TestAsyncMeetingOperations:
 
     @pytest.fixture
     def mock_async_client(self) -> AsyncMock:
-        """Create a mock async HTTP client."""
+        """Create a mock async HTTP client.
+
+        Returns:
+            A mock async HTTP client.
+
+        """
         mock = AsyncMock()
         mock.headers = {"Authorization": "Bearer test-api-key"}
         return mock
 
     @pytest_asyncio.fixture
     async def async_client(self, mock_async_client: AsyncMock) -> AsyncClient:
-        """Create an AsyncClient with mocked HTTP client."""
+        """Create an AsyncClient with mocked HTTP client.
+
+        Returns:
+            An AsyncClient instance with mocked HTTP client.
+
+        """
         client = AsyncClient(api_key="test-api-key")
         await client.close()  # Close the real client
         client._client = mock_async_client  # type: ignore[assignment]
@@ -312,7 +322,7 @@ class TestAsyncMeetingOperations:
             return mock
 
         # Set up the mock to return different responses based on the URL
-        def get_side_effect(url: str, **kwargs: Any) -> MagicMock:
+        def get_side_effect(url: str, **_kwargs: Any) -> MagicMock:
             if url == "users/mine":
                 return create_response({"Id": 456})
             elif url == "L10/456/list":

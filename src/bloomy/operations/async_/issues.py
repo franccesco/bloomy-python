@@ -20,6 +20,7 @@ class AsyncIssueOperations(AsyncBaseOperations):
 
         Args:
             client: The async HTTP client to use for API requests.
+
         """
         super().__init__(client)
 
@@ -33,8 +34,6 @@ class AsyncIssueOperations(AsyncBaseOperations):
             An IssueDetails model instance containing detailed information
             about the issue
 
-        Raises:
-            httpx.HTTPError: When the API request fails or returns invalid data
         """
         response = await self._client.get(f"issues/{issue_id}")
         response.raise_for_status()
@@ -66,7 +65,7 @@ class AsyncIssueOperations(AsyncBaseOperations):
 
         Raises:
             ValueError: When both user_id and meeting_id are provided
-            httpx.HTTPError: When the API request fails or returns invalid data
+
         """
         if user_id and meeting_id:
             raise ValueError(
@@ -104,8 +103,6 @@ class AsyncIssueOperations(AsyncBaseOperations):
         Returns:
             True if issue was successfully solved
 
-        Raises:
-            httpx.HTTPError: When the API request fails
         """
         response = await self._client.post(
             f"issues/{issue_id}/complete", json={"complete": True}
@@ -131,9 +128,6 @@ class AsyncIssueOperations(AsyncBaseOperations):
         Returns:
             A CreatedIssue model instance containing the newly created issue details
 
-        Raises:
-            httpx.HTTPError: When the API request fails or returns invalid data
-            ValueError: When required parameters are missing or invalid
         """
         if user_id is None:
             user_id = await self.get_user_id()

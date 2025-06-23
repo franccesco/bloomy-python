@@ -123,7 +123,12 @@ class Todo(BloomyBaseModel):
     @field_validator("due_date", "complete_date", "create_date", mode="before")
     @classmethod
     def parse_optional_datetime(cls, v: Any) -> datetime | None:
-        """Parse optional datetime fields."""
+        """Parse optional datetime fields.
+
+        Returns:
+            The parsed datetime or None if empty.
+
+        """
         if v is None or v == "":
             return None
         return v
@@ -147,7 +152,12 @@ class Issue(BloomyBaseModel):
     @field_validator("closed_date", "completion_date", mode="before")
     @classmethod
     def parse_optional_datetime(cls, v: Any) -> datetime | None:
-        """Parse optional datetime fields."""
+        """Parse optional datetime fields.
+
+        Returns:
+            The parsed datetime or None if empty.
+
+        """
         if v is None or v == "":
             return None
         return v
@@ -183,7 +193,12 @@ class Goal(BloomyBaseModel):
     @field_validator("complete_date", mode="before")
     @classmethod
     def parse_optional_datetime(cls, v: Any) -> datetime | None:
-        """Parse optional datetime fields."""
+        """Parse optional datetime fields.
+
+        Returns:
+            The parsed datetime or None if empty.
+
+        """
         if v is None or v == "":
             return None
         return v
@@ -206,7 +221,12 @@ class ScorecardMetric(BloomyBaseModel):
     @field_validator("target", "value", mode="before")
     @classmethod
     def parse_optional_float(cls, v: Any) -> float | None:
-        """Parse optional float fields."""
+        """Parse optional float fields.
+
+        Returns:
+            The parsed float or None if empty.
+
+        """
         if v is None or v == "":
             return None
         return float(v)

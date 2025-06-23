@@ -55,6 +55,7 @@ class AsyncClient:
         user = await client.user.details()
         await client.close()
         ```
+
     """
 
     def __init__(
@@ -68,8 +69,6 @@ class AsyncClient:
             api_key: The API key for authentication.
             base_url: The base URL for the API.
 
-        Raises:
-            ConfigurationError: If no API key is found.
         """
         config = Configuration(api_key=api_key)
         self._client = httpx.AsyncClient(
@@ -101,7 +100,12 @@ class AsyncClient:
         )
 
     async def __aenter__(self) -> AsyncClient:
-        """Enter the async context manager."""
+        """Enter the async context manager.
+
+        Returns:
+            The async client instance.
+
+        """
         await self._client.__aenter__()
         return self
 

@@ -20,6 +20,7 @@ class AsyncScorecardOperations(AsyncBaseOperations):
 
         Args:
             client: The async HTTP client to use for API requests.
+
         """
         super().__init__(client)
 
@@ -28,6 +29,7 @@ class AsyncScorecardOperations(AsyncBaseOperations):
 
         Returns:
             A ScorecardWeek model instance containing current week details
+
         """
         response = await self._client.get("weeks/current")
         response.raise_for_status()
@@ -60,6 +62,7 @@ class AsyncScorecardOperations(AsyncBaseOperations):
 
         Raises:
             ValueError: If both user_id and meeting_id are provided
+
         """
         if user_id and meeting_id:
             raise ValueError(
@@ -116,6 +119,7 @@ class AsyncScorecardOperations(AsyncBaseOperations):
 
         Returns:
             True if the score was successfully updated
+
         """
         week_data = await self.current_week()
         week_id = week_data.week_number + week_offset

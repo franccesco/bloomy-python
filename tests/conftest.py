@@ -12,7 +12,12 @@ from bloomy import Client, Configuration
 
 @pytest.fixture
 def mock_response() -> Mock:
-    """Create a mock response object."""
+    """Create a mock response object.
+
+    Returns:
+        A mock httpx.Response object.
+
+    """
     response = Mock(spec=httpx.Response)
     response.is_success = True
     response.status_code = 200
@@ -22,7 +27,12 @@ def mock_response() -> Mock:
 
 @pytest.fixture
 def mock_http_client(mock_response: Mock) -> Mock:
-    """Create a mock HTTP client."""
+    """Create a mock HTTP client.
+
+    Returns:
+        A mock httpx.Client with mocked methods.
+
+    """
     client = Mock(spec=httpx.Client)
     client.get = Mock(return_value=mock_response)
     client.post = Mock(return_value=mock_response)
@@ -34,7 +44,12 @@ def mock_http_client(mock_response: Mock) -> Mock:
 
 @pytest.fixture
 def client_with_mock_http(mock_http_client: Mock) -> Any:
-    """Create a Bloomy client with mocked HTTP client."""
+    """Create a Bloomy client with mocked HTTP client.
+
+    Yields:
+        A Bloomy client instance with mocked HTTP client.
+
+    """
     with patch("bloomy.client.httpx.Client") as mock_client_class:
         mock_client_class.return_value = mock_http_client
         client = Client(api_key="test-api-key")
@@ -43,7 +58,12 @@ def client_with_mock_http(mock_http_client: Mock) -> Any:
 
 @pytest.fixture
 def mock_config() -> Mock:
-    """Create a mock configuration."""
+    """Create a mock configuration.
+
+    Returns:
+        A mock Configuration object.
+
+    """
     config = Mock(spec=Configuration)
     config.api_key = "test-api-key"
     return config
@@ -51,19 +71,34 @@ def mock_config() -> Mock:
 
 @pytest.fixture
 def sample_user_data() -> dict[str, Any]:
-    """Sample user data for testing."""
+    """Sample user data for testing.
+
+    Returns:
+        A dictionary containing sample user data.
+
+    """
     return {"Id": 123, "Name": "John Doe", "ImageUrl": "https://example.com/avatar.jpg"}
 
 
 @pytest.fixture
 def sample_meeting_data() -> dict[str, Any]:
-    """Sample meeting data for testing."""
+    """Sample meeting data for testing.
+
+    Returns:
+        A dictionary containing sample meeting data.
+
+    """
     return {"Id": 456, "Name": "Weekly Team Meeting"}
 
 
 @pytest.fixture
 def sample_todo_data() -> dict[str, Any]:
-    """Sample todo data for testing."""
+    """Sample todo data for testing.
+
+    Returns:
+        A dictionary containing sample todo data.
+
+    """
     return {
         "Id": 789,
         "Name": "Complete project proposal",
@@ -78,7 +113,12 @@ def sample_todo_data() -> dict[str, Any]:
 
 @pytest.fixture
 def sample_goal_data() -> dict[str, Any]:
-    """Sample goal data for testing."""
+    """Sample goal data for testing.
+
+    Returns:
+        A dictionary containing sample goal data.
+
+    """
     return {
         "Id": 101,
         "Name": "Increase sales by 20%",
@@ -92,7 +132,12 @@ def sample_goal_data() -> dict[str, Any]:
 
 @pytest.fixture
 def sample_scorecard_data() -> dict[str, Any]:
-    """Sample scorecard data for testing."""
+    """Sample scorecard data for testing.
+
+    Returns:
+        A dictionary containing sample scorecard data.
+
+    """
     return {
         "Scores": [
             {
@@ -112,7 +157,12 @@ def sample_scorecard_data() -> dict[str, Any]:
 
 @pytest.fixture
 def sample_issue_data() -> dict[str, Any]:
-    """Sample issue data for testing."""
+    """Sample issue data for testing.
+
+    Returns:
+        A dictionary containing sample issue data.
+
+    """
     return {
         "Id": 401,
         "Name": "Server performance issue",
@@ -128,7 +178,12 @@ def sample_issue_data() -> dict[str, Any]:
 
 @pytest.fixture
 def sample_headline_data() -> dict[str, Any]:
-    """Sample headline data for testing."""
+    """Sample headline data for testing.
+
+    Returns:
+        A dictionary containing sample headline data.
+
+    """
     return {
         "Id": 501,
         "Name": "Product launch successful",
@@ -145,7 +200,12 @@ def sample_headline_data() -> dict[str, Any]:
 
 @pytest.fixture
 def mock_user_id() -> Generator[PropertyMock, None, None]:
-    """Mock user_id property for operations classes."""
+    """Mock user_id property for operations classes.
+
+    Yields:
+        A PropertyMock that returns user ID 123.
+
+    """
     with patch(
         "bloomy.utils.base_operations.BaseOperations.user_id", new_callable=PropertyMock
     ) as mock:

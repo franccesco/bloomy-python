@@ -14,6 +14,7 @@ class ScorecardOperations(BaseOperations):
     Note:
         This class is already initialized via the client and usable as
         `client.scorecard.method`
+
     """
 
     def current_week(self) -> ScorecardWeek:
@@ -28,6 +29,7 @@ class ScorecardOperations(BaseOperations):
             # Returns: ScorecardWeek(id=123, week_number=24, week_start='2024-06-10',
             #                       week_end='2024-06-16')
             ```
+
         """
         response = self._client.get("weeks/current")
         response.raise_for_status()
@@ -80,6 +82,7 @@ class ScorecardOperations(BaseOperations):
             week_offset to -1.
             To fetch scores for a future week, you can set week_offset to a
             positive value.
+
         """
         if user_id and meeting_id:
             raise ValueError(
@@ -140,6 +143,7 @@ class ScorecardOperations(BaseOperations):
             client.scorecard.score(measurable_id=123, score=5)
             # Returns: True
             ```
+
         """
         week_data = self.current_week()
         week_id = week_data.week_number + week_offset

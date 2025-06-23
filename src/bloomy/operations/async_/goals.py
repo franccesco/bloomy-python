@@ -22,6 +22,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
 
         Args:
             client: The async HTTP client to use for API requests.
+
         """
         super().__init__(client)
 
@@ -39,6 +40,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
             - A list of GoalInfo model instances if archived is false
             - A GoalListResponse model with 'active' and 'archived' lists of
                 GoalInfo instances if archived is true
+
         """
         if user_id is None:
             user_id = await self.get_user_id()
@@ -49,25 +51,22 @@ class AsyncGoalOperations(AsyncBaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        active_goals: list[GoalInfo] = []
-        for goal in data:
-            active_goals.append(
-                GoalInfo(
-                    id=goal["Id"],
-                    user_id=goal["Owner"]["Id"],
-                    user_name=goal["Owner"]["Name"],
-                    title=goal["Name"],
-                    created_at=goal["CreateTime"],
-                    due_date=goal["DueDate"],
-                    status="Completed" if goal.get("Complete") else "Incomplete",
-                    meeting_id=goal["Origins"][0]["Id"]
-                    if goal.get("Origins")
-                    else None,
-                    meeting_title=goal["Origins"][0]["Name"]
-                    if goal.get("Origins")
-                    else None,
-                )
+        active_goals: list[GoalInfo] = [
+            GoalInfo(
+                id=goal["Id"],
+                user_id=goal["Owner"]["Id"],
+                user_name=goal["Owner"]["Name"],
+                title=goal["Name"],
+                created_at=goal["CreateTime"],
+                due_date=goal["DueDate"],
+                status="Completed" if goal.get("Complete") else "Incomplete",
+                meeting_id=goal["Origins"][0]["Id"] if goal.get("Origins") else None,
+                meeting_title=(
+                    goal["Origins"][0]["Name"] if goal.get("Origins") else None
+                ),
             )
+            for goal in data
+        ]
 
         if archived:
             archived_goals = await self._get_archived_goals(user_id)
@@ -88,6 +87,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
 
         Returns:
             A CreatedGoalInfo model instance representing the newly created goal
+
         """
         if user_id is None:
             user_id = await self.get_user_id()
@@ -120,6 +120,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
 
         Returns:
             True if deletion was successful
+
         """
         response = await self._client.delete(f"rocks/{goal_id}")
         response.raise_for_status()
@@ -146,6 +147,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
 
         Raises:
             ValueError: If an invalid status value is provided
+
         """
         if accountable_user is None:
             accountable_user = await self.get_user_id()
@@ -176,6 +178,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
 
         Returns:
             True if the archival was successful
+
         """
         response = await self._client.put(f"rocks/{goal_id}/archive")
         response.raise_for_status()
@@ -189,6 +192,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
 
         Returns:
             True if the restore operation was successful
+
         """
         response = await self._client.put(f"rocks/{goal_id}/restore")
         response.raise_for_status()
@@ -204,6 +208,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
 
         Returns:
             A list of ArchivedGoalInfo model instances containing archived goal details
+
         """
         if user_id is None:
             user_id = await self.get_user_id()

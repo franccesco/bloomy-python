@@ -19,6 +19,7 @@ class TodoOperations(BaseOperations):
     Note:
         This class is already initialized via the client and usable as
         `client.todo.method`
+
     """
 
     def list(
@@ -42,6 +43,7 @@ class TodoOperations(BaseOperations):
             client.todo.list()
             # Returns: [Todo(id=1, name='New Todo', due_date='2024-06-15', ...)]
             ```
+
         """
         if user_id is not None and meeting_id is not None:
             raise ValueError(
@@ -88,6 +90,7 @@ class TodoOperations(BaseOperations):
             )
             # Returns: Todo(id=1, name='New Todo', due_date='2024-06-15', ...)
             ```
+
         """
         if user_id is None:
             user_id = self.user_id
@@ -134,6 +137,7 @@ class TodoOperations(BaseOperations):
             client.todo.complete(1)
             # Returns: True
             ```
+
         """
         response = self._client.post(f"todo/{todo_id}/complete?status=true")
         response.raise_for_status()
@@ -166,6 +170,7 @@ class TodoOperations(BaseOperations):
             )
             # Returns: Todo(id=1, name='Updated Todo', due_date='2024-11-01', ...)
             ```
+
         """
         payload: dict[str, Any] = {}
 
@@ -215,6 +220,7 @@ class TodoOperations(BaseOperations):
             client.todo.details(1)
             # Returns: Todo(id=1, name='Updated Todo', due_date='2024-11-01', ...)
             ```
+
         """
         response = self._client.get(f"todo/{todo_id}")
 

@@ -23,5 +23,12 @@ class APIError(BloomyError):
     """Raised when API returns an error response."""
 
     def __init__(self, message: str, status_code: int | None = None) -> None:
+        """Initialize API error with message and optional status code.
+
+        Args:
+            message: The error message
+            status_code: The HTTP status code if available
+
+        """
         super().__init__(message)
         self.status_code = status_code

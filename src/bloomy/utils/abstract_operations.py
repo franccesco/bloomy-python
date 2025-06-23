@@ -13,6 +13,7 @@ class AbstractOperations:
 
         Args:
             client: The HTTP client to use for API requests.
+
         """
         self._client = client
         self._user_id: int | None = None
@@ -25,6 +26,7 @@ class AbstractOperations:
 
         Returns:
             A dictionary with None values removed.
+
         """
         return {k: v for k, v in kwargs.items() if v is not None}
 
@@ -41,6 +43,7 @@ class AbstractOperations:
 
         Raises:
             ValueError: If both parameters are provided.
+
         """
         if param1 is not None and param2 is not None:
             raise ValueError(f"Cannot specify both {param1_name} and {param2_name}")

@@ -23,6 +23,7 @@ class MeetingOperations(BaseOperations):
     Note:
         This class is already initialized via the client and usable as
         `client.meeting.method`
+
     """
 
     def list(self, user_id: int | None = None) -> builtins.list[MeetingListItem]:
@@ -39,6 +40,7 @@ class MeetingOperations(BaseOperations):
             client.meeting.list()
             # Returns: [MeetingListItem(id=123, name="Team Meeting", ...), ...]
             ```
+
         """
         if user_id is None:
             user_id = self.user_id
@@ -64,6 +66,7 @@ class MeetingOperations(BaseOperations):
             # Returns: [MeetingAttendee(user_id=1, name='John Doe',
             #          image_url='...'), ...]
             ```
+
         """
         response = self._client.get(f"L10/{meeting_id}/attendees")
         response.raise_for_status()
@@ -96,6 +99,7 @@ class MeetingOperations(BaseOperations):
             # Returns: [Issue(id=1, name='Issue Title',
             #          created_at='2024-06-10', ...), ...]
             ```
+
         """
         response = self._client.get(
             f"L10/{meeting_id}/issues",
@@ -138,6 +142,7 @@ class MeetingOperations(BaseOperations):
             client.meeting.todos(1)
             # Returns: [Todo(id=1, name='Todo Title', due_date='2024-06-12', ...), ...]
             ```
+
         """
         response = self._client.get(
             f"L10/{meeting_id}/todos",
@@ -163,6 +168,7 @@ class MeetingOperations(BaseOperations):
             # Returns: [ScorecardMetric(id=1, title='Sales', target=100.0,
             #           metric_type='>', unit='currency', ...), ...]
             ```
+
         """
         response = self._client.get(f"L10/{meeting_id}/measurables")
         response.raise_for_status()
@@ -218,12 +224,16 @@ class MeetingOperations(BaseOperations):
         Returns:
             A MeetingDetails model instance with comprehensive meeting information
 
+        Raises:
+            APIError: If the meeting with the specified ID is not found
+
         Example:
             ```python
             client.meeting.details(1)
             # Returns: MeetingDetails(id=1, name='Team Meeting', attendees=[...],
             #                        issues=[...], todos=[...], metrics=[...])
             ```
+
         """
         meetings = self.list()
         meeting = next((m for m in meetings if m.id == meeting_id), None)
@@ -264,6 +274,7 @@ class MeetingOperations(BaseOperations):
             client.meeting.create("New Meeting", attendees=[2, 3])
             # Returns: {"meeting_id": 1, "title": "New Meeting", "attendees": [2, 3]}
             ```
+
         """
         if attendees is None:
             attendees = []
@@ -298,6 +309,7 @@ class MeetingOperations(BaseOperations):
             client.meeting.delete(1)
             # Returns: True
             ```
+
         """
         response = self._client.delete(f"L10/{meeting_id}")
         response.raise_for_status()

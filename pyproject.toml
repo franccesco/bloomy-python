@@ -1,6 +1,6 @@
 [project]
 name = "bloomy-python"
-version = "0.13.0"
+version = "0.13.1"
 description = "Python SDK for Bloom Growth API"
 readme = "README.md"
 authors = [{ name = "Franccesco Orozco", email = "franccesco@codingdose.info" }]
@@ -33,16 +33,37 @@ line-length = 88
 target-version = "py312"
 
 [tool.ruff.lint]
+preview = true
 select = [
-  "E",  # pycodestyle errors
-  "W",  # pycodestyle warnings
-  "F",  # pyflakes
-  "I",  # isort
-  "B",  # flake8-bugbear
-  "C4", # flake8-comprehensions
-  "UP", # pyupgrade
+  "E",     # pycodestyle — hard PEP 8 violations (indentation, spacing, etc.).
+  "W",     # pycodestyle warnings — softer style nits you still want fixed.
+  "F",     # pyflakes — real code errors: undefined names, unused vars & imports.
+  "I",     # isort — keep your import blocks deterministically sorted/grouped.
+  "B",     # bugbear — likely bugs and nasty edge-cases (mutable defaults, etc.).
+  "C4",    # comprehensions — suggest faster/cleaner list- & dict-comps.
+  "UP",    # pyupgrade — auto-rewrite code to the newest-supported Python syntax.
+  "C901",  # mccabe — flag functions whose cyclomatic complexity balloons.
+  "SIM",   # simplify — call out over-engineered constructs; prefer the obvious one-liner.
+  "N",     # pep8-naming — enforce PEP 8 names for classes, funcs, vars, etc.
+  "RUF",   # Ruff-native extras — Ruff-only correctness/perf rules (a la "unicorn").
+  "FAST",  # fastapi — idiomatic FastAPI patterns and anti-pattern detection.
+  "DOC",   # pydoclint — Google/Numpy docstring section order & completeness.
+  "D",     # pydocstyle — PEP 257 docstring formatting conformance.
+  "ARG",   # unused-arguments — catch never-used *args/**kwargs/params.
+  "PERF",  # perflint — flag obvious performance foot-guns (e.g., `list()` in loops).
+  "ASYNC",
 ]
-ignore = []
+ignore = ["D203", "D212", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+  "ARG002",
+  "DOC501",
+] # Ignore unused method arguments and exception docs in tests
+
+[tool.ruff.lint.mccabe]
+# Maximum complexity allowed (default is 10)
+max-complexity = 10
 
 [tool.ruff.format]
 quote-style = "double"
@@ -61,7 +82,7 @@ addopts = "-ra --strict-markers --cov=bloomy --cov-report=term-missing"
 
 [dependency-groups]
 dev = [
-    "mkdocs>=1.6.1",
-    "mkdocs-material>=9.6.14",
-    "mkdocstrings[python]>=0.29.1",
+  "mkdocs>=1.6.1",
+  "mkdocs-material>=9.6.14",
+  "mkdocstrings[python]>=0.29.1",
 ]

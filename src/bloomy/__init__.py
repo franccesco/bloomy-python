@@ -43,12 +43,12 @@ try:
 except importlib.metadata.PackageNotFoundError:
     __version__ = "unknown"
 __all__ = [
+    "APIError",
+    "ArchivedGoalInfo",
     "AsyncClient",
+    "BloomyError",
     "Client",
     "Configuration",
-    "APIError",
-    "BloomyError",
-    "ArchivedGoalInfo",
     "CreatedGoalInfo",
     "CreatedIssue",
     "CurrentWeek",

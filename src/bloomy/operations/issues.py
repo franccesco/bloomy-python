@@ -25,15 +25,13 @@ class IssueOperations(BaseOperations):
             An IssueDetails model instance containing detailed information
             about the issue
 
-        Raises:
-            httpx.HTTPError: When the API request fails or returns invalid data
-
         Example:
             ```python
             client.issue.details(123)
             # Returns: IssueDetails(id=123, title='Issue Title',
             #          created_at='2024-06-10', ...)
             ```
+
         """
         response = self._client.get(f"issues/{issue_id}")
         response.raise_for_status()
@@ -65,7 +63,6 @@ class IssueOperations(BaseOperations):
 
         Raises:
             ValueError: When both user_id and meeting_id are provided
-            httpx.HTTPError: When the API request fails or returns invalid data
 
         Example:
             ```python
@@ -77,6 +74,7 @@ class IssueOperations(BaseOperations):
             client.issue.list(meeting_id=456)
             # Returns: [IssueListItem(id=2, title='Issue 2', ...), ...]
             ```
+
         """
         if user_id and meeting_id:
             raise ValueError(
@@ -114,14 +112,12 @@ class IssueOperations(BaseOperations):
         Returns:
             True if issue was successfully solved
 
-        Raises:
-            httpx.HTTPError: When the API request fails
-
         Example:
             ```python
             client.issue.solve(123)
             # Returns: True
             ```
+
         """
         response = self._client.post(
             f"issues/{issue_id}/complete", json={"complete": True}
@@ -147,10 +143,6 @@ class IssueOperations(BaseOperations):
         Returns:
             A CreatedIssue model instance containing the newly created issue details
 
-        Raises:
-            httpx.HTTPError: When the API request fails or returns invalid data
-            ValueError: When required parameters are missing or invalid
-
         Example:
             ```python
             client.issue.create(
@@ -160,6 +152,7 @@ class IssueOperations(BaseOperations):
             )
             # Returns: CreatedIssue(id=456, title='New Issue', meeting_id=123, ...)
             ```
+
         """
         if user_id is None:
             user_id = self.user_id

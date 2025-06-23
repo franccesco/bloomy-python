@@ -34,6 +34,7 @@ class UserOperationsMixin:
 
         Returns:
             A UserDetails model.
+
         """
         user_details_dict = {
             "id": data["Id"],
@@ -59,6 +60,7 @@ class UserOperationsMixin:
 
         Returns:
             A list of DirectReport models.
+
         """
         return [
             DirectReport(
@@ -77,6 +79,7 @@ class UserOperationsMixin:
 
         Returns:
             A list of Position models.
+
         """
         return [
             Position(
@@ -96,6 +99,7 @@ class UserOperationsMixin:
 
         Returns:
             A list of UserSearchResult models.
+
         """
         return [
             UserSearchResult(
@@ -120,6 +124,7 @@ class UserOperationsMixin:
 
         Returns:
             A list of UserListItem models.
+
         """
         filtered_users = [
             user

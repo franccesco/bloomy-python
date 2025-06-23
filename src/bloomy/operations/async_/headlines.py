@@ -26,6 +26,7 @@ class AsyncHeadlineOperations(AsyncBaseOperations):
 
         Args:
             client: The async HTTP client to use for API requests.
+
         """
         super().__init__(client)
 
@@ -48,8 +49,6 @@ class AsyncHeadlineOperations(AsyncBaseOperations):
             A HeadlineInfo model instance containing id, title, owner_details,
             and notes_url
 
-        Raises:
-            httpx.HTTPStatusError: If the API request fails
         """
         if owner_id is None:
             owner_id = await self.get_user_id()
@@ -79,8 +78,6 @@ class AsyncHeadlineOperations(AsyncBaseOperations):
         Returns:
             True if update was successful
 
-        Raises:
-            httpx.HTTPStatusError: If the API request fails
         """
         payload = {"title": title}
         response = await self._client.put(f"headline/{headline_id}", json=payload)
@@ -97,8 +94,6 @@ class AsyncHeadlineOperations(AsyncBaseOperations):
             A HeadlineDetails model instance containing id, title, notes_url,
             meeting_details, owner_details, archived, created_at, and closed_at
 
-        Raises:
-            httpx.HTTPStatusError: If the API request fails
         """
         response = await self._client.get(
             f"headline/{headline_id}", params={"Include_Origin": "true"}
@@ -137,7 +132,7 @@ class AsyncHeadlineOperations(AsyncBaseOperations):
 
         Raises:
             ValueError: If both user_id and meeting_id are provided
-            httpx.HTTPStatusError: If the API request fails
+
         """
         if user_id and meeting_id:
             raise ValueError("Please provide either user_id or meeting_id, not both.")
@@ -180,8 +175,6 @@ class AsyncHeadlineOperations(AsyncBaseOperations):
         Returns:
             True if the deletion was successful
 
-        Raises:
-            httpx.HTTPStatusError: If the API request fails
         """
         response = await self._client.delete(f"headline/{headline_id}")
         response.raise_for_status()
