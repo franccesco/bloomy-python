@@ -304,7 +304,7 @@ class ScorecardItem(BloomyBaseModel):
     value: float | None = None
     week: str  # Changed from int to str to handle "2024-W25" format
     week_id: int
-    updated_at: str
+    updated_at: str | None = None
 
 
 class IssueDetails(BloomyBaseModel):
