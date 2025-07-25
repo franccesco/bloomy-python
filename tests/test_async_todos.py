@@ -255,9 +255,7 @@ class TestAsyncTodoOperations:
         assert result is True
 
         # Verify the API call
-        mock_async_client.post.assert_called_once_with(
-            "todo/1/complete?status=true"
-        )
+        mock_async_client.post.assert_called_once_with("todo/1/complete?status=true")
 
     @pytest.mark.asyncio
     async def test_update(

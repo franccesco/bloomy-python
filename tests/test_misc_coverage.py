@@ -46,6 +46,7 @@ class TestMiscCoverage:
 
     def test_sync_user_id_property_missing(self) -> None:
         """Test sync base operations when user_id is accessed but not initialized."""
+
         # This tests line 32 in base_operations.py
         # We need a custom implementation since BaseOperations is abstract
         class TestOperations(BaseOperations):

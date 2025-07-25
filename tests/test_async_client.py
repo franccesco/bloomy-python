@@ -53,11 +53,7 @@ class TestAsyncClient:
         await client.__aenter__()
 
         # Call __aexit__ with exception info
-        result = await client.__aexit__(
-            Exception,
-            Exception("Test error"),
-            None
-        )
+        result = await client.__aexit__(Exception, Exception("Test error"), None)
 
         # Should return None (not suppressing exception)
         assert result is None

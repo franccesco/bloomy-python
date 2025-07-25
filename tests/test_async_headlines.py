@@ -64,7 +64,7 @@ class TestAsyncHeadlineOperations:
         headline = await async_client.headline.create(
             meeting_id=10,
             title="Product launch successful",
-            notes="Exceeded targets by 15%"
+            notes="Exceeded targets by 15%",
         )
 
         assert isinstance(headline, HeadlineInfo)
@@ -77,8 +77,8 @@ class TestAsyncHeadlineOperations:
             json={
                 "title": "Product launch successful",
                 "ownerId": 1,
-                "notes": "Exceeded targets by 15%"
-            }
+                "notes": "Exceeded targets by 15%",
+            },
         )
 
     @pytest.mark.asyncio

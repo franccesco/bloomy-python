@@ -261,9 +261,7 @@ class TestAsyncScorecardOperations:
             await async_client.scorecard.list(user_id=123, meeting_id=456)
 
     @pytest.mark.asyncio
-    async def test_score(
-        self, async_client: AsyncClient, mock_async_client: AsyncMock
-    ):
+    async def test_score(self, async_client: AsyncClient, mock_async_client: AsyncMock):
         """Test updating a score."""
         # Mock current week response
         week_data = {
