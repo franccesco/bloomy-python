@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import builtins
+from typing import Any
 
-from ..models import CreatedIssue, IssueDetails, IssueListItem
+from ..models import (
+    BulkCreateError,
+    BulkCreateResult,
+    CreatedIssue,
+    IssueDetails,
+    IssueListItem,
+)
 from ..utils.base_operations import BaseOperations
 
 
@@ -178,3 +185,69 @@ class IssueOperations(BaseOperations):
             user_id=data["Owner"]["Id"],
             notes_url=data["DetailsUrl"],
         )
+
+    def create_many(
+        self, issues: builtins.list[dict[str, Any]]
+    ) -> BulkCreateResult[CreatedIssue]:
+        """Create multiple issues in a best-effort manner.
+
+        Processes each issue sequentially to avoid rate limiting.
+        Failed operations are captured and returned alongside successful ones.
+
+        Args:
+            issues: List of dictionaries containing issue data. Each dict should have:
+                - meeting_id (required): ID of the associated meeting
+                - title (required): Title of the issue
+                - user_id (optional): ID of the issue owner (defaults to current user)
+                - notes (optional): Additional notes for the issue
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of CreatedIssue instances for successful creations
+                - failed: List of BulkCreateError instances for failed creations
+
+        Raises:
+            ValueError: When required parameters are missing in issue data
+
+        Example:
+            ```python
+            result = client.issue.create_many([
+                {"meeting_id": 123, "title": "Issue 1", "notes": "Details"},
+                {"meeting_id": 123, "title": "Issue 2", "user_id": 456}
+            ])
+
+            print(f"Created {len(result.successful)} issues")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        successful: builtins.list[CreatedIssue] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for index, issue_data in enumerate(issues):
+            try:
+                # Extract parameters from the issue data
+                meeting_id = issue_data.get("meeting_id")
+                title = issue_data.get("title")
+                user_id = issue_data.get("user_id")
+                notes = issue_data.get("notes")
+
+                # Validate required parameters
+                if meeting_id is None:
+                    raise ValueError("meeting_id is required")
+                if title is None:
+                    raise ValueError("title is required")
+
+                # Create the issue
+                created_issue = self.create(
+                    meeting_id=meeting_id, title=title, user_id=user_id, notes=notes
+                )
+                successful.append(created_issue)
+
+            except Exception as e:
+                failed.append(
+                    BulkCreateError(index=index, input_data=issue_data, error=str(e))
+                )
+
+        return BulkCreateResult(successful=successful, failed=failed)

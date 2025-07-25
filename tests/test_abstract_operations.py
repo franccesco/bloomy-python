@@ -1,6 +1,5 @@
 """Tests for abstract operations base classes."""
 
-
 import pytest
 
 from bloomy.utils.abstract_operations import AbstractOperations

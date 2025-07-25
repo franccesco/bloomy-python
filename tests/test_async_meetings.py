@@ -267,7 +267,11 @@ class TestAsyncMeetingOperations:
 
         # Mock attendees response
         attendees_data = [
-            {"UserId": 1, "Name": "John Doe", "ImageUrl": "https://example.com/john.jpg"}
+            {
+                "UserId": 1,
+                "Name": "John Doe",
+                "ImageUrl": "https://example.com/john.jpg",
+            }
         ]
 
         # Mock issues response
@@ -327,12 +331,16 @@ class TestAsyncMeetingOperations:
                 return create_response({"Id": 456})
             elif url == "L10/456/list":
                 # Return a list containing the meeting we're looking for
-                return create_response([{
-                    "Id": 123,
-                    "Type": "L10",
-                    "Key": "L10-123",
-                    "Name": "Weekly Team Meeting",
-                }])
+                return create_response(
+                    [
+                        {
+                            "Id": 123,
+                            "Type": "L10",
+                            "Key": "L10-123",
+                            "Name": "Weekly Team Meeting",
+                        }
+                    ]
+                )
             elif url == "L10/123":
                 return create_response(meeting_data)
             elif url == "L10/123/attendees":

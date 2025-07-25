@@ -158,9 +158,7 @@ class TestAsyncGoalOperations:
 
         mock_async_client.post.return_value = mock_resp
 
-        goal = await async_client.goal.create(
-            title="New Goal", meeting_id=10
-        )
+        goal = await async_client.goal.create(title="New Goal", meeting_id=10)
 
         assert isinstance(goal, CreatedGoalInfo)
         assert goal.id == 126

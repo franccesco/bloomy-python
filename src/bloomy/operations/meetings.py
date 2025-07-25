@@ -7,6 +7,8 @@ from typing import Any
 
 from ..exceptions import APIError
 from ..models import (
+    BulkCreateError,
+    BulkCreateResult,
     Issue,
     MeetingAttendee,
     MeetingDetails,
@@ -314,3 +316,67 @@ class MeetingOperations(BaseOperations):
         response = self._client.delete(f"L10/{meeting_id}")
         response.raise_for_status()
         return True
+
+    def create_many(
+        self, meetings: builtins.list[dict[str, Any]]
+    ) -> BulkCreateResult[dict[str, Any]]:
+        """Create multiple meetings in a best-effort manner.
+
+        Processes each meeting sequentially to avoid rate limiting.
+        Failed operations are captured and returned alongside successful ones.
+
+        Args:
+            meetings: List of dictionaries containing meeting data. Each dict
+                should have:
+                - title (required): Title of the meeting
+                - add_self (optional): Whether to add current user as attendee
+                    (default: True)
+                - attendees (optional): List of user IDs to add as attendees
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of dicts with meeting_id, title, and attendees
+                - failed: List of BulkCreateError instances for failed creations
+
+        Raises:
+            ValueError: When required parameters are missing in meeting data
+
+        Example:
+            ```python
+            result = client.meeting.create_many([
+                {"title": "Weekly Team Meeting", "attendees": [2, 3]},
+                {"title": "1:1 Meeting", "add_self": False}
+            ])
+
+            print(f"Created {len(result.successful)} meetings")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        successful: builtins.list[dict[str, Any]] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for index, meeting_data in enumerate(meetings):
+            try:
+                # Extract parameters from the meeting data
+                title = meeting_data.get("title")
+                add_self = meeting_data.get("add_self", True)
+                attendees = meeting_data.get("attendees")
+
+                # Validate required parameters
+                if title is None:
+                    raise ValueError("title is required")
+
+                # Create the meeting
+                created_meeting = self.create(
+                    title=title, add_self=add_self, attendees=attendees
+                )
+                successful.append(created_meeting)
+
+            except Exception as e:
+                failed.append(
+                    BulkCreateError(index=index, input_data=meeting_data, error=str(e))
+                )
+
+        return BulkCreateResult(successful=successful, failed=failed)

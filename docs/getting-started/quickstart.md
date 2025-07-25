@@ -145,6 +145,27 @@ new_goal = client.goal.create(
 )
 ```
 
+### Bulk Operations
+
+Create multiple items at once with detailed error handling:
+
+```python
+# Create multiple todos in one operation
+todos = [
+    {"title": "Review sales report", "meeting_id": meeting_id},
+    {"title": "Update CRM data", "meeting_id": meeting_id},
+    {"title": "Send follow-up emails", "meeting_id": meeting_id}
+]
+
+result = client.todo.create_many(todos)
+print(f"Created {len(result.successful)} todos successfully")
+
+if result.failed:
+    print(f"Failed to create {len(result.failed)} todos:")
+    for failure in result.failed:
+        print(f"  - {failure.input_data['title']}: {failure.error}")
+```
+
 ### Working with Meetings
 
 ```python
@@ -216,3 +237,4 @@ except BloomyError as e:
 - Read the [Configuration Guide](configuration.md) for more authentication options
 - Explore the [API Reference](../api/client.md) for all available operations
 - Check out the [User Guide](../guide/usage.md) for advanced usage patterns
+- Learn about [Bulk Operations](../guide/bulk-operations.md) for efficient batch processing

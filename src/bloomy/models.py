@@ -389,3 +389,18 @@ class HeadlineListItem(BloomyBaseModel):
     archived: bool
     created_at: str
     closed_at: str | None = None
+
+
+class BulkCreateError(BloomyBaseModel):
+    """Error detail for failed bulk creation."""
+
+    index: int
+    input_data: dict[str, Any]
+    error: str
+
+
+class BulkCreateResult[T](BloomyBaseModel):
+    """Result of a bulk create operation."""
+
+    successful: list[T]
+    failed: list[BulkCreateError]

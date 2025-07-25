@@ -153,9 +153,7 @@ class TestAsyncIssueOperations:
             await async_client.issue.list(user_id=123, meeting_id=456)
 
     @pytest.mark.asyncio
-    async def test_solve(
-        self, async_client: AsyncClient, mock_async_client: AsyncMock
-    ):
+    async def test_solve(self, async_client: AsyncClient, mock_async_client: AsyncMock):
         """Test solving an issue."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
@@ -189,9 +187,7 @@ class TestAsyncIssueOperations:
         mock_async_client.post.return_value = mock_response
 
         issue = await async_client.issue.create(
-            meeting_id=456,
-            title="New issue",
-            notes="This needs urgent attention"
+            meeting_id=456, title="New issue", notes="This needs urgent attention"
         )
 
         assert isinstance(issue, CreatedIssue)
@@ -206,8 +202,8 @@ class TestAsyncIssueOperations:
                 "title": "New issue",
                 "meetingid": 456,
                 "ownerid": 123,
-                "notes": "This needs urgent attention"
-            }
+                "notes": "This needs urgent attention",
+            },
         )
 
     @pytest.mark.asyncio
@@ -230,18 +226,11 @@ class TestAsyncIssueOperations:
 
         mock_async_client.post.return_value = mock_response
 
-        issue = await async_client.issue.create(
-            meeting_id=456,
-            title="New issue"
-        )
+        issue = await async_client.issue.create(meeting_id=456, title="New issue")
 
         assert issue.id == 403
 
         mock_async_client.post.assert_called_once_with(
             "issues/create",
-            json={
-                "title": "New issue",
-                "meetingid": 456,
-                "ownerid": 123
-            }
+            json={"title": "New issue", "meetingid": 456, "ownerid": 123},
         )

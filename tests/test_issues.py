@@ -30,9 +30,7 @@ class TestIssueOperations:
 
         mock_http_client.get.assert_called_once_with("issues/401")
 
-    def test_list_user_issues(
-        self, mock_http_client: Mock, mock_user_id: Mock
-    ) -> None:
+    def test_list_user_issues(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
         """Test listing issues for a user."""
         mock_response = Mock()
         mock_response.json.return_value = [
