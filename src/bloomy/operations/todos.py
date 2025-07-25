@@ -6,7 +6,7 @@ import builtins
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ..models import Todo
+from ..models import BulkCreateError, BulkCreateResult, Todo
 from ..utils.base_operations import BaseOperations
 
 if TYPE_CHECKING:
@@ -233,3 +233,76 @@ class TodoOperations(BaseOperations):
         todo = response.json()
 
         return Todo.model_validate(todo)
+
+    def create_many(
+        self, todos: builtins.list[dict[str, Any]]
+    ) -> BulkCreateResult[Todo]:
+        """Create multiple todos in a best-effort manner.
+
+        Processes each todo sequentially to avoid rate limiting.
+        Failed operations are captured and returned alongside successful ones.
+
+        Args:
+            todos: List of dictionaries containing todo data. Each dict should have:
+                - title (required): Title of the todo
+                - meeting_id (required): ID of the associated meeting
+                - due_date (optional): Due date in string format
+                - user_id (optional): ID of the responsible user (defaults to
+                    current user)
+                - notes (optional): Additional notes for the todo
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of Todo instances for successful creations
+                - failed: List of BulkCreateError instances for failed creations
+
+        Raises:
+            ValueError: When required parameters are missing in todo data
+
+        Example:
+            ```python
+            result = client.todo.create_many([
+                {"title": "Todo 1", "meeting_id": 123, "due_date": "2024-12-31"},
+                {"title": "Todo 2", "meeting_id": 123, "user_id": 456}
+            ])
+
+            print(f"Created {len(result.successful)} todos")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        successful: builtins.list[Todo] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for index, todo_data in enumerate(todos):
+            try:
+                # Extract parameters from the todo data
+                title = todo_data.get("title")
+                meeting_id = todo_data.get("meeting_id")
+                due_date = todo_data.get("due_date")
+                user_id = todo_data.get("user_id")
+                notes = todo_data.get("notes")
+
+                # Validate required parameters
+                if title is None:
+                    raise ValueError("title is required")
+                if meeting_id is None:
+                    raise ValueError("meeting_id is required")
+
+                # Create the todo
+                created_todo = self.create(
+                    title=title,
+                    meeting_id=meeting_id,
+                    due_date=due_date,
+                    user_id=user_id,
+                    notes=notes,
+                )
+                successful.append(created_todo)
+
+            except Exception as e:
+                failed.append(
+                    BulkCreateError(index=index, input_data=todo_data, error=str(e))
+                )
+
+        return BulkCreateResult(successful=successful, failed=failed)

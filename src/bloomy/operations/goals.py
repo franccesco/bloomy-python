@@ -5,7 +5,14 @@ from __future__ import annotations
 import builtins
 from typing import TYPE_CHECKING
 
-from ..models import ArchivedGoalInfo, CreatedGoalInfo, GoalInfo, GoalListResponse
+from ..models import (
+    ArchivedGoalInfo,
+    BulkCreateError,
+    BulkCreateResult,
+    CreatedGoalInfo,
+    GoalInfo,
+    GoalListResponse,
+)
 from ..utils.base_operations import BaseOperations
 
 if TYPE_CHECKING:
@@ -273,3 +280,68 @@ class GoalOperations(BaseOperations):
             )
             for goal in data
         ]
+
+    def create_many(
+        self, goals: builtins.list[dict[str, Any]]
+    ) -> BulkCreateResult[CreatedGoalInfo]:
+        """Create multiple goals in a best-effort manner.
+
+        Processes each goal sequentially to avoid rate limiting.
+        Failed operations are captured and returned alongside successful ones.
+
+        Args:
+            goals: List of dictionaries containing goal data. Each dict should have:
+                - title (required): Title of the goal
+                - meeting_id (required): ID of the associated meeting
+                - user_id (optional): ID of the responsible user (defaults to
+                    current user)
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of CreatedGoalInfo instances for successful creations
+                - failed: List of BulkCreateError instances for failed creations
+
+        Raises:
+            ValueError: When required parameters are missing in goal data
+
+        Example:
+            ```python
+            result = client.goal.create_many([
+                {"title": "Q1 Revenue Target", "meeting_id": 123},
+                {"title": "Product Launch", "meeting_id": 123, "user_id": 456}
+            ])
+
+            print(f"Created {len(result.successful)} goals")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        successful: builtins.list[CreatedGoalInfo] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for index, goal_data in enumerate(goals):
+            try:
+                # Extract parameters from the goal data
+                title = goal_data.get("title")
+                meeting_id = goal_data.get("meeting_id")
+                user_id = goal_data.get("user_id")
+
+                # Validate required parameters
+                if title is None:
+                    raise ValueError("title is required")
+                if meeting_id is None:
+                    raise ValueError("meeting_id is required")
+
+                # Create the goal
+                created_goal = self.create(
+                    title=title, meeting_id=meeting_id, user_id=user_id
+                )
+                successful.append(created_goal)
+
+            except Exception as e:
+                failed.append(
+                    BulkCreateError(index=index, input_data=goal_data, error=str(e))
+                )
+
+        return BulkCreateResult(successful=successful, failed=failed)
