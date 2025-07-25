@@ -9,6 +9,7 @@ A Python SDK for interacting with the [Bloom Growth](https://www.bloomgrowth.com
 - **Type Safety** - Full type annotations for better IDE support and code reliability
 - **Pythonic API** - Intuitive, Python-friendly interface with proper error handling
 - **Full Async Support** - Complete async/await support for all operations with dedicated AsyncClient for modern Python applications
+- **Bulk Operations** - Efficient bulk creation for issues, todos, meetings, and goals with detailed error handling
 
 ## Quick Example
 

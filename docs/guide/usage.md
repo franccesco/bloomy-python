@@ -87,6 +87,14 @@ todos_to_complete = client.todo.list()[:5]
 for todo in todos_to_complete:
     if not todo.complete:
         client.todo.complete(todo.id)
+
+# For bulk creation, see the [Bulk Operations Guide](bulk-operations.md)
+# Example: Create multiple todos at once
+todos = [
+    {"title": "Task 1", "meeting_id": 123},
+    {"title": "Task 2", "meeting_id": 123}
+]
+result = client.todo.create_many(todos)
 ```
 
 ### Error Recovery

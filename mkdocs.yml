@@ -95,6 +95,7 @@ nav:
   - User Guide:
       - Authentication: guide/authentication.md
       - Basic Usage: guide/usage.md
+      - Bulk Operations: guide/bulk-operations.md
       - Async Support: guide/async.md
       - Error Handling: guide/errors.md
   - API Reference:
