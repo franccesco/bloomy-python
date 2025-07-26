@@ -331,3 +331,225 @@ class TestBulkMeetingOperations:
         assert len(result.failed) == 1
         assert result.failed[0].index == 0
         assert "Network error" in result.failed[0].error
+
+    def test_get_many_all_success(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
+        """Test retrieving multiple meetings when all succeed."""
+        # Mock list response for finding meetings
+        list_response = Mock()
+        list_response.json.return_value = [
+            {"Id": 456, "Type": "NameId", "Key": "NameId_456", "Name": "Meeting 1"},
+            {"Id": 457, "Type": "NameId", "Key": "NameId_457", "Name": "Meeting 2"},
+            {"Id": 458, "Type": "NameId", "Key": "NameId_458", "Name": "Meeting 3"},
+        ]
+
+        # Mock responses for each meeting's details
+        attendees_response = Mock()
+        attendees_response.json.return_value = [
+            {"Id": 123, "Name": "John Doe", "ImageUrl": "https://example.com/john.jpg"}
+        ]
+
+        issues_response = Mock()
+        issues_response.json.return_value = []
+
+        todos_response = Mock()
+        todos_response.json.return_value = []
+
+        metrics_response = Mock()
+        metrics_response.json.return_value = []
+
+        # Set up the side effect for all calls
+        # Pattern: list, attendees, issues, todos, metrics (repeated for each meeting)
+        mock_http_client.get.side_effect = [
+            list_response,  # For finding meeting 456
+            attendees_response,
+            issues_response,
+            todos_response,
+            metrics_response,
+            list_response,  # For finding meeting 457
+            attendees_response,
+            issues_response,
+            todos_response,
+            metrics_response,
+            list_response,  # For finding meeting 458
+            attendees_response,
+            issues_response,
+            todos_response,
+            metrics_response,
+        ]
+
+        meeting_ops = MeetingOperations(mock_http_client)
+
+        result = meeting_ops.get_many([456, 457, 458])
+
+        assert isinstance(result, BulkCreateResult)
+        assert len(result.successful) == 3
+        assert len(result.failed) == 0
+
+        # Check successful meetings
+        assert result.successful[0].id == 456
+        assert result.successful[0].name == "Meeting 1"
+        assert result.successful[1].id == 457
+        assert result.successful[1].name == "Meeting 2"
+        assert result.successful[2].id == 458
+        assert result.successful[2].name == "Meeting 3"
+
+        # Verify all API calls were made (5 calls per meeting)
+        assert mock_http_client.get.call_count == 15
+
+    def test_get_many_partial_failure(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
+        """Test retrieving multiple meetings with some failures."""
+        # Mock list response for finding meetings
+        list_response = Mock()
+        list_response.json.return_value = [
+            {"Id": 456, "Type": "NameId", "Key": "NameId_456", "Name": "Meeting 1"},
+        ]
+
+        empty_list_response = Mock()
+        empty_list_response.json.return_value = []  # Meeting not found
+
+        # Mock responses for meeting details
+        attendees_response = Mock()
+        attendees_response.json.return_value = []
+
+        issues_response = Mock()
+        issues_response.json.return_value = []
+
+        todos_response = Mock()
+        todos_response.json.return_value = []
+
+        metrics_response = Mock()
+        metrics_response.json.return_value = []
+
+        # Set up the side effect
+        mock_http_client.get.side_effect = [
+            list_response,  # First meeting found
+            attendees_response,
+            issues_response,
+            todos_response,
+            metrics_response,
+            empty_list_response,  # Second meeting not found
+            list_response,  # Third meeting found
+            attendees_response,
+            issues_response,
+            todos_response,
+            metrics_response,
+        ]
+
+        meeting_ops = MeetingOperations(mock_http_client)
+
+        result = meeting_ops.get_many([456, 999, 456])  # 999 doesn't exist
+
+        assert len(result.successful) == 2
+        assert len(result.failed) == 1
+
+        # Check failure details
+        assert result.failed[0].index == 1
+        assert result.failed[0].input_data == {"meeting_id": 999}
+        assert "Meeting with ID 999 not found" in result.failed[0].error
+
+    def test_get_many_empty_list(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
+        """Test retrieving meetings with empty list."""
+        meeting_ops = MeetingOperations(mock_http_client)
+
+        result = meeting_ops.get_many([])
+
+        assert len(result.successful) == 0
+        assert len(result.failed) == 0
+        assert mock_http_client.get.call_count == 0
+
+    def test_get_many_network_error(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
+        """Test retrieving meetings with network errors."""
+        # First meeting succeeds
+        list_response = Mock()
+        list_response.json.return_value = [
+            {"Id": 456, "Type": "NameId", "Key": "NameId_456", "Name": "Meeting 1"},
+        ]
+
+        attendees_response = Mock()
+        attendees_response.json.return_value = []
+
+        issues_response = Mock()
+        issues_response.json.return_value = []
+
+        todos_response = Mock()
+        todos_response.json.return_value = []
+
+        metrics_response = Mock()
+        metrics_response.json.return_value = []
+
+        # Set up side effect with network error on second meeting
+        mock_http_client.get.side_effect = [
+            list_response,  # First meeting list
+            attendees_response,
+            issues_response,
+            todos_response,
+            metrics_response,
+            Exception("Network error"),  # Network error on second meeting list
+        ]
+
+        meeting_ops = MeetingOperations(mock_http_client)
+
+        result = meeting_ops.get_many([456, 457])
+
+        assert len(result.successful) == 1
+        assert len(result.failed) == 1
+        assert result.successful[0].id == 456
+        assert result.failed[0].index == 1
+        assert "Network error" in result.failed[0].error
+
+    def test_get_many_duplicate_ids(
+        self, mock_http_client: Mock, mock_user_id: Mock
+    ) -> None:
+        """Test retrieving meetings with duplicate IDs."""
+        # Mock list response
+        list_response = Mock()
+        list_response.json.return_value = [
+            {"Id": 456, "Type": "NameId", "Key": "NameId_456", "Name": "Meeting 1"},
+        ]
+
+        # Mock responses for meeting details
+        attendees_response = Mock()
+        attendees_response.json.return_value = []
+
+        issues_response = Mock()
+        issues_response.json.return_value = []
+
+        todos_response = Mock()
+        todos_response.json.return_value = []
+
+        metrics_response = Mock()
+        metrics_response.json.return_value = []
+
+        # Set up the side effect (need responses for two calls to same meeting)
+        mock_http_client.get.side_effect = [
+            list_response,  # First call for meeting 456
+            attendees_response,
+            issues_response,
+            todos_response,
+            metrics_response,
+            list_response,  # Second call for meeting 456
+            attendees_response,
+            issues_response,
+            todos_response,
+            metrics_response,
+        ]
+
+        meeting_ops = MeetingOperations(mock_http_client)
+
+        result = meeting_ops.get_many([456, 456])
+
+        assert len(result.successful) == 2
+        assert len(result.failed) == 0
+        assert result.successful[0].id == 456
+        assert result.successful[1].id == 456
+
+        # Should make 10 calls (5 per meeting retrieval)
+        assert mock_http_client.get.call_count == 10
