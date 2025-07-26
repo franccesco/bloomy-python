@@ -49,6 +49,11 @@ The async version `AsyncMeetingOperations` provides the same methods as above, b
         
         # Get metrics for a meeting
         metrics = client.meeting.metrics(meeting_id=123)
+        
+        # Batch retrieve multiple meetings
+        result = client.meeting.get_many([123, 456, 789])
+        for meeting in result.successful:
+            print(f"{meeting.name}: {len(meeting.attendees)} attendees")
     ```
 
 === "Async"
@@ -72,6 +77,11 @@ The async version `AsyncMeetingOperations` provides the same methods as above, b
             
             # Get metrics for a meeting
             metrics = await client.meeting.metrics(meeting_id=123)
+            
+            # Batch retrieve multiple meetings
+            result = await client.meeting.get_many([123, 456, 789])
+            for meeting in result.successful:
+                print(f"{meeting.name}: {len(meeting.attendees)} attendees")
     
     asyncio.run(main())
     ```
@@ -82,6 +92,7 @@ The async version `AsyncMeetingOperations` provides the same methods as above, b
 |--------|-------------|------------|
 | `list()` | Get all meetings | `include_closed` |
 | `details()` | Get detailed meeting information with attendees, issues, todos, and metrics | `meeting_id` |
+| `get_many()` | Batch retrieve multiple meetings by ID | `meeting_ids` |
 | `attendees()` | Get meeting attendees | `meeting_id` |
 | `issues()` | Get issues from a meeting | `meeting_id` |
 | `todos()` | Get todos from a meeting | `meeting_id` |

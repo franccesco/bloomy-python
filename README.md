@@ -85,6 +85,14 @@ new_meeting = client.meeting.create(
 
 # Delete a meeting
 client.meeting.delete(meeting_id=123)
+
+# Get multiple meetings by ID (batch read)
+result = client.meeting.get_many([123, 456, 789])
+for meeting in result.successful:
+    print(f"{meeting.name} - {meeting.meeting_date}")
+# Handle any failed retrievals
+for error in result.failed:
+    print(f"Failed to get meeting: {error.error}")
 ```
 
 ### Todos
