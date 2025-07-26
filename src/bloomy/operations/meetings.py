@@ -380,3 +380,46 @@ class MeetingOperations(BaseOperations):
                 )
 
         return BulkCreateResult(successful=successful, failed=failed)
+
+    def get_many(self, meeting_ids: list[int]) -> BulkCreateResult[MeetingDetails]:
+        """Retrieve details for multiple meetings in a best-effort manner.
+
+        Processes each meeting ID sequentially to avoid rate limiting.
+        Failed operations are captured and returned alongside successful ones.
+
+        Args:
+            meeting_ids: List of meeting IDs to retrieve details for
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of MeetingDetails instances for successfully
+                  retrieved meetings
+                - failed: List of BulkCreateError instances for failed retrievals
+
+        Example:
+            ```python
+            result = client.meeting.get_many([1, 2, 3])
+
+            print(f"Retrieved {len(result.successful)} meetings")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        successful: builtins.list[MeetingDetails] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for index, meeting_id in enumerate(meeting_ids):
+            try:
+                # Use the existing details method to get meeting details
+                meeting_details = self.details(meeting_id)
+                successful.append(meeting_details)
+
+            except Exception as e:
+                failed.append(
+                    BulkCreateError(
+                        index=index, input_data={"meeting_id": meeting_id}, error=str(e)
+                    )
+                )
+
+        return BulkCreateResult(successful=successful, failed=failed)
