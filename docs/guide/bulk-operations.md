@@ -1,19 +1,23 @@
 # Bulk Operations
 
-The Bloomy SDK provides bulk creation methods for efficiently creating multiple resources at once. These methods use a best-effort approach, processing items sequentially to avoid rate limiting while capturing both successful and failed operations.
+The Bloomy SDK provides bulk operations for efficiently working with multiple resources at once. These methods use a best-effort approach, processing items sequentially to avoid rate limiting while capturing both successful and failed operations.
 
 ## Overview
 
 Bulk operations are available for:
 
+**Creation:**
 - Issues
 - Todos
 - Meetings
 - Goals (Rocks)
 
+**Reading:**
+- Meetings (batch retrieve by ID)
+
 Each bulk operation returns a `BulkCreateResult` containing:
 
-- `successful`: List of successfully created items
+- `successful`: List of successfully processed items (created or retrieved)
 - `failed`: List of `BulkCreateError` objects with failure details
 
 !!! note "Best-Effort Processing"
@@ -185,6 +189,77 @@ result = client.meeting.create_many(meetings)
 meeting_ids = [m['id'] for m in result.successful]
 print(f"Created meetings with IDs: {meeting_ids}")
 ```
+
+## Batch Reading Operations
+
+### Retrieving Multiple Meetings
+
+The SDK supports batch retrieval of meetings by ID, which is useful when you need details for multiple meetings:
+
+```python
+# Get details for multiple meetings
+meeting_ids = [123, 456, 789, 999]  # IDs to retrieve
+result = client.meeting.get_many(meeting_ids)
+
+# Process successful retrievals
+print(f"Successfully retrieved {len(result.successful)} meetings:")
+for meeting in result.successful:
+    print(f"  - {meeting.name} on {meeting.meeting_date}")
+    print(f"    Attendees: {len(meeting.attendees)}")
+    print(f"    Todos: {len(meeting.todos)}")
+    print(f"    Issues: {len(meeting.issues)}")
+
+# Handle failed retrievals
+if result.failed:
+    print(f"\nFailed to retrieve {len(result.failed)} meetings:")
+    for failure in result.failed:
+        meeting_id = failure.input_data.get('meeting_id')
+        print(f"  - Meeting ID {meeting_id}: {failure.error}")
+```
+
+### Use Cases for Batch Reading
+
+```python
+# Example 1: Get details for all meetings from a list operation
+meetings_list = client.meeting.list()
+meeting_ids = [m.id for m in meetings_list[:10]]  # First 10 meetings
+
+result = client.meeting.get_many(meeting_ids)
+meetings_with_details = result.successful
+
+# Example 2: Aggregate data across multiple meetings
+def get_all_open_issues(meeting_ids):
+    """Get all open issues from multiple meetings."""
+    result = client.meeting.get_many(meeting_ids)
+    
+    all_issues = []
+    for meeting in result.successful:
+        open_issues = [issue for issue in meeting.issues if not issue.closed]
+        all_issues.extend(open_issues)
+    
+    return all_issues
+
+# Example 3: Build a dashboard with meeting metrics
+def build_meeting_dashboard(meeting_ids):
+    """Build dashboard data for multiple meetings."""
+    result = client.meeting.get_many(meeting_ids)
+    
+    dashboard = {
+        'total_meetings': len(result.successful),
+        'total_attendees': sum(len(m.attendees) for m in result.successful),
+        'total_todos': sum(len(m.todos) for m in result.successful),
+        'total_open_issues': sum(
+            len([i for i in m.issues if not i.closed]) 
+            for m in result.successful
+        ),
+        'failed_retrievals': len(result.failed)
+    }
+    
+    return dashboard
+```
+
+!!! note "Performance Considerations"
+    The `get_many()` method fetches full meeting details including attendees, issues, todos, and metrics for each meeting. For large batches, this can be data-intensive. Consider chunking if retrieving many meetings.
 
 ## Error Handling Strategies
 
