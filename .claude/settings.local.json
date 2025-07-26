@@ -2,13 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(ruff:*)",
+      "Bash(pytest:*)",
       "Bash(pyright:*)",
       "Bash(mkdocs:*)",
       "Bash(rg:*)",
       "Bash(ls:*)",
       "Bash(grep:*)",
       "Bash(find:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(uv:*)"
     ],
     "deny": []
   }
