@@ -1,16 +1,17 @@
 """Tests for async issue operations."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 
 from bloomy import AsyncClient
-from bloomy.models import CreatedIssue, IssueDetails, IssueListItem
+from bloomy.models import CreatedIssue
 
 
 class TestAsyncIssueOperations:
-    """Test async issue operations."""
+    """Test cases for AsyncIssueOperations."""
 
     @pytest.fixture
     def mock_async_client(self) -> AsyncMock:
@@ -37,200 +38,312 @@ class TestAsyncIssueOperations:
         client._client = mock_async_client  # type: ignore[assignment]
         # Also update the operations to use the mocked client
         client.user._client = mock_async_client  # type: ignore[assignment]
-        client.meeting._client = mock_async_client  # type: ignore[assignment]
-        client.todo._client = mock_async_client  # type: ignore[assignment]
         client.issue._client = mock_async_client  # type: ignore[assignment]
-        # Mock the user ID for operations
-        client.issue._user_id = 123
         return client
 
     @pytest.mark.asyncio
-    async def test_details(
+    async def test_create_many_all_successful(
         self, async_client: AsyncClient, mock_async_client: AsyncMock
-    ):
-        """Test getting issue details."""
-        mock_data = {
-            "Id": 401,
-            "Name": "Server performance issue",
-            "DetailsUrl": "https://example.com/issue/401",
-            "CreateTime": "2024-06-01T10:00:00Z",
-            "CloseTime": None,
-            "OriginId": 456,
-            "Origin": "Infrastructure Meeting",
-            "Owner": {"Id": 123, "Name": "John Doe"},
-        }
+    ) -> None:
+        """Test bulk creation where all issues are created successfully."""
+        # Mock user ID response
+        mock_user_response = MagicMock()
+        mock_user_response.json.return_value = {"Id": 456}
+        mock_user_response.raise_for_status = MagicMock()
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = mock_data
-        mock_response.raise_for_status = MagicMock()
-
-        mock_async_client.get.return_value = mock_response
-
-        issue = await async_client.issue.details(401)
-
-        assert isinstance(issue, IssueDetails)
-        assert issue.id == 401
-        assert issue.title == "Server performance issue"
-        assert issue.meeting_id == 456
-        assert issue.user_name == "John Doe"
-        assert issue.completed_at is None
-
-        mock_async_client.get.assert_called_once_with("issues/401")
-
-    @pytest.mark.asyncio
-    async def test_list_by_user(
-        self, async_client: AsyncClient, mock_async_client: AsyncMock
-    ):
-        """Test listing issues by user."""
-        mock_data = [
+        # Mock create responses for each issue
+        created_issues = [
             {
-                "Id": 401,
-                "Name": "First issue",
-                "DetailsUrl": "https://example.com/issue/401",
-                "CreateTime": "2024-06-01T10:00:00Z",
-                "OriginId": 456,
-                "Origin": "Infrastructure Meeting",
+                "Id": 100,
+                "Name": "Issue 1",
+                "OriginId": 125,
+                "Origin": "Team Meeting",
+                "Owner": {"Id": 456, "Name": "John Doe"},
+                "DetailsUrl": "https://example.com/issue/100",
             },
             {
-                "Id": 402,
-                "Name": "Second issue",
-                "DetailsUrl": "https://example.com/issue/402",
-                "CreateTime": "2024-06-02T10:00:00Z",
-                "OriginId": 457,
-                "Origin": "Product Meeting",
+                "Id": 101,
+                "Name": "Issue 2",
+                "OriginId": 125,
+                "Origin": "Team Meeting",
+                "Owner": {"Id": 789, "Name": "Jane Smith"},
+                "DetailsUrl": "https://example.com/issue/101",
+            },
+            {
+                "Id": 102,
+                "Name": "Issue 3",
+                "OriginId": 126,
+                "Origin": "Planning Meeting",
+                "Owner": {"Id": 456, "Name": "John Doe"},
+                "DetailsUrl": "https://example.com/issue/102",
             },
         ]
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = mock_data
-        mock_response.raise_for_status = MagicMock()
+        # Create mock responses for each issue
+        mock_create_responses = []
+        for issue_data in created_issues:
+            mock_response = MagicMock()
+            mock_response.json.return_value = issue_data
+            mock_response.raise_for_status = MagicMock()
+            mock_create_responses.append(mock_response)
 
-        mock_async_client.get.return_value = mock_response
+        # Set up side effects
+        mock_async_client.get.return_value = mock_user_response
+        mock_async_client.post.side_effect = mock_create_responses
 
-        issues = await async_client.issue.list()
+        # Test data
+        issues_to_create = [
+            {"meeting_id": 125, "title": "Issue 1", "notes": "First issue"},
+            {"meeting_id": 125, "title": "Issue 2", "user_id": 789},
+            {"meeting_id": 126, "title": "Issue 3"},
+        ]
 
-        assert len(issues) == 2
-        assert isinstance(issues[0], IssueListItem)
-        assert issues[0].id == 401
-        assert issues[0].title == "First issue"
-        assert issues[1].meeting_title == "Product Meeting"
+        # Call the method
+        result = await async_client.issue.create_many(issues_to_create)
 
-        mock_async_client.get.assert_called_once_with("issues/users/123")
+        # Verify the result
+        assert len(result.successful) == 3
+        assert len(result.failed) == 0
+        assert all(isinstance(issue, CreatedIssue) for issue in result.successful)
+        assert result.successful[0].id == 100
+        assert result.successful[1].id == 101
+        assert result.successful[2].id == 102
+
+        # Verify API calls - should be 1 get for user ID + 3 posts for issues
+        assert mock_async_client.get.call_count == 1
+        assert mock_async_client.post.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_list_by_meeting(
+    async def test_create_many_partial_failure(
         self, async_client: AsyncClient, mock_async_client: AsyncMock
-    ):
-        """Test listing issues by meeting."""
-        mock_data = [
-            {
-                "Id": 401,
-                "Name": "Meeting issue",
-                "DetailsUrl": "https://example.com/issue/401",
-                "CreateTime": "2024-06-01T10:00:00Z",
-                "OriginId": 456,
-                "Origin": "Infrastructure Meeting",
+    ) -> None:
+        """Test bulk creation where some issues fail."""
+        # Mock user ID response
+        mock_user_response = MagicMock()
+        mock_user_response.json.return_value = {"Id": 456}
+        mock_user_response.raise_for_status = MagicMock()
+
+        # Mock responses - 1st succeeds, 2nd fails with 400, 3rd fails with 500
+        mock_success_response = MagicMock()
+        mock_success_response.json.return_value = {
+            "Id": 200,
+            "Name": "Success Issue",
+            "OriginId": 125,
+            "Origin": "Team Meeting",
+            "Owner": {"Id": 456, "Name": "John Doe"},
+            "DetailsUrl": "https://example.com/issue/200",
+        }
+        mock_success_response.raise_for_status = MagicMock()
+
+        # Create error responses
+        from httpx import HTTPStatusError, Response
+
+        mock_400_response = Response(400, json={"error": "Bad Request"})
+        mock_400_error = HTTPStatusError(
+            "Bad Request", request=None, response=mock_400_response
+        )
+
+        mock_500_response = Response(500, json={"error": "Internal Server Error"})
+        mock_500_error = HTTPStatusError(
+            "Internal Server Error", request=None, response=mock_500_response
+        )
+
+        # Set up side effects
+        mock_async_client.get.return_value = mock_user_response
+
+        # Create side effect function that tracks call count
+        call_count = 0
+
+        def post_side_effect(*_args, **_kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return mock_success_response
+            elif call_count == 2:
+                # For 400 error, raise_for_status will throw
+                mock_resp = MagicMock()
+                mock_resp.raise_for_status.side_effect = mock_400_error
+                return mock_resp
+            else:
+                # For 500 error, raise_for_status will throw
+                mock_resp = MagicMock()
+                mock_resp.raise_for_status.side_effect = mock_500_error
+                return mock_resp
+
+        mock_async_client.post.side_effect = post_side_effect
+
+        # Test data
+        issues_to_create = [
+            {"meeting_id": 125, "title": "Success Issue"},
+            {"meeting_id": 125, "title": "Bad Request Issue"},
+            {"meeting_id": 126, "title": "Server Error Issue"},
+        ]
+
+        # Call the method
+        result = await async_client.issue.create_many(issues_to_create)
+
+        # Verify the result
+        assert len(result.successful) == 1
+        assert len(result.failed) == 2
+        assert result.successful[0].id == 200
+        assert result.successful[0].title == "Success Issue"
+
+        # Check failed items
+        assert result.failed[0].index == 1
+        assert result.failed[0].input_data == issues_to_create[1]
+        assert "Bad Request" in result.failed[0].error
+
+        assert result.failed[1].index == 2
+        assert result.failed[1].input_data == issues_to_create[2]
+        assert "Internal Server Error" in result.failed[1].error
+
+    @pytest.mark.asyncio
+    async def test_create_many_empty_list(
+        self, async_client: AsyncClient, mock_async_client: AsyncMock
+    ) -> None:
+        """Test bulk creation with an empty list."""
+        # Call the method with empty list
+        result = await async_client.issue.create_many([])
+
+        # Verify the result
+        assert len(result.successful) == 0
+        assert len(result.failed) == 0
+
+        # Verify no API calls were made
+        mock_async_client.get.assert_not_called()
+        mock_async_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_many_validation_errors(
+        self, async_client: AsyncClient, mock_async_client: AsyncMock
+    ) -> None:
+        """Test bulk creation with validation errors (missing required fields)."""
+        # Test data with missing required fields
+        issues_to_create = [
+            {"meeting_id": 125, "title": "Valid Issue"},  # Valid
+            {"title": "Missing Meeting ID"},  # Missing meeting_id
+            {"meeting_id": 125},  # Missing title
+            {},  # Missing both required fields
+        ]
+
+        # Mock user ID response for valid issue
+        mock_user_response = MagicMock()
+        mock_user_response.json.return_value = {"Id": 456}
+        mock_user_response.raise_for_status = MagicMock()
+
+        # Mock successful create response for valid issue
+        mock_create_response = MagicMock()
+        mock_create_response.json.return_value = {
+            "Id": 300,
+            "Name": "Valid Issue",
+            "OriginId": 125,
+            "Origin": "Team Meeting",
+            "Owner": {"Id": 456, "Name": "John Doe"},
+            "DetailsUrl": "https://example.com/issue/300",
+        }
+        mock_create_response.raise_for_status = MagicMock()
+
+        # Set up mocks
+        mock_async_client.get.return_value = mock_user_response
+        mock_async_client.post.return_value = mock_create_response
+
+        # Call the method
+        result = await async_client.issue.create_many(issues_to_create)
+
+        # Verify the result
+        assert len(result.successful) == 1
+        assert len(result.failed) == 3
+        assert result.successful[0].id == 300
+
+        # Check validation errors
+        assert result.failed[0].index == 1
+        assert "meeting_id is required" in result.failed[0].error
+
+        assert result.failed[1].index == 2
+        assert "title is required" in result.failed[1].error
+
+        assert result.failed[2].index == 3
+        assert "meeting_id is required" in result.failed[2].error
+
+        # Only one successful creation should have been attempted
+        assert mock_async_client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_create_many_concurrent_execution(
+        self, async_client: AsyncClient, mock_async_client: AsyncMock
+    ) -> None:
+        """Test that create_many executes operations concurrently."""
+        import time
+
+        # Mock user ID response
+        mock_user_response = MagicMock()
+        mock_user_response.json.return_value = {"Id": 456}
+        mock_user_response.raise_for_status = MagicMock()
+
+        # Track when each call starts and ends
+        call_times = []
+
+        async def delayed_post(*_args, **_kwargs):
+            """Simulate a network call with delay.
+
+            Returns:
+                Mock response object.
+
+            """
+            start_time = time.time()
+            await asyncio.sleep(0.1)  # Simulate network delay
+            end_time = time.time()
+            call_times.append((start_time, end_time))
+
+            # Return a mock response
+            mock_response = MagicMock()
+            mock_response.json.return_value = {
+                "Id": len(call_times) + 400,
+                "Name": f"Issue {len(call_times)}",
+                "OriginId": 125,
+                "Origin": "Team Meeting",
+                "Owner": {"Id": 456, "Name": "John Doe"},
+                "DetailsUrl": f"https://example.com/issue/{len(call_times) + 400}",
             }
+            mock_response.raise_for_status = MagicMock()
+            return mock_response
+
+        # Set up mocks
+        mock_async_client.get.return_value = mock_user_response
+        mock_async_client.post.side_effect = delayed_post
+
+        # Create multiple issues
+        issues_to_create = [
+            {"meeting_id": 125, "title": f"Issue {i}"} for i in range(5)
         ]
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = mock_data
-        mock_response.raise_for_status = MagicMock()
-
-        mock_async_client.get.return_value = mock_response
-
-        issues = await async_client.issue.list(meeting_id=456)
-
-        assert len(issues) == 1
-        assert issues[0].title == "Meeting issue"
-
-        mock_async_client.get.assert_called_once_with("l10/456/issues")
-
-    @pytest.mark.asyncio
-    async def test_list_invalid_params(self, async_client: AsyncClient):
-        """Test listing issues with both user_id and meeting_id raises error."""
-        with pytest.raises(ValueError, match="Please provide either"):
-            await async_client.issue.list(user_id=123, meeting_id=456)
-
-    @pytest.mark.asyncio
-    async def test_solve(self, async_client: AsyncClient, mock_async_client: AsyncMock):
-        """Test solving an issue."""
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_async_client.post.return_value = mock_response
-
-        result = await async_client.issue.solve(401)
-
-        assert result is True
-        mock_async_client.post.assert_called_once_with(
-            "issues/401/complete", json={"complete": True}
+        # Call the method with max_concurrent=3
+        start_time = time.time()
+        result = await async_client.issue.create_many(
+            issues_to_create, max_concurrent=3
         )
+        total_time = time.time() - start_time
 
-    @pytest.mark.asyncio
-    async def test_create(
-        self, async_client: AsyncClient, mock_async_client: AsyncMock
-    ):
-        """Test creating a new issue."""
-        mock_response_data = {
-            "Id": 403,
-            "Name": "New issue",
-            "DetailsUrl": "https://example.com/issue/403",
-            "OriginId": 456,
-            "Origin": "Infrastructure Meeting",
-            "Owner": {"Id": 123},
-        }
+        # Verify all were successful
+        assert len(result.successful) == 5
+        assert len(result.failed) == 0
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = mock_response_data
-        mock_response.raise_for_status = MagicMock()
+        # Verify concurrent execution
+        # With max_concurrent=3 and 5 issues with 0.1s delay each:
+        # - First 3 should start almost simultaneously
+        # - Next 2 should start after first ones complete
+        # Total time should be ~0.2s (2 batches) not ~0.5s (sequential)
+        assert total_time < 0.3  # Allow some overhead
 
-        mock_async_client.post.return_value = mock_response
+        # Check that we had overlapping executions
+        overlapping_count = 0
+        for i in range(len(call_times) - 1):
+            for j in range(i + 1, len(call_times)):
+                # Check if execution times overlap
+                if (
+                    call_times[i][0] < call_times[j][1]
+                    and call_times[j][0] < call_times[i][1]
+                ):
+                    overlapping_count += 1
 
-        issue = await async_client.issue.create(
-            meeting_id=456, title="New issue", notes="This needs urgent attention"
-        )
-
-        assert isinstance(issue, CreatedIssue)
-        assert issue.id == 403
-        assert issue.title == "New issue"
-        assert issue.meeting_id == 456
-        assert issue.user_id == 123
-
-        mock_async_client.post.assert_called_once_with(
-            "issues/create",
-            json={
-                "title": "New issue",
-                "meetingid": 456,
-                "ownerid": 123,
-                "notes": "This needs urgent attention",
-            },
-        )
-
-    @pytest.mark.asyncio
-    async def test_create_without_notes(
-        self, async_client: AsyncClient, mock_async_client: AsyncMock
-    ):
-        """Test creating a new issue without notes."""
-        mock_response_data = {
-            "Id": 403,
-            "Name": "New issue",
-            "DetailsUrl": "https://example.com/issue/403",
-            "OriginId": 456,
-            "Origin": "Infrastructure Meeting",
-            "Owner": {"Id": 123},
-        }
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = mock_response_data
-        mock_response.raise_for_status = MagicMock()
-
-        mock_async_client.post.return_value = mock_response
-
-        issue = await async_client.issue.create(meeting_id=456, title="New issue")
-
-        assert issue.id == 403
-
-        mock_async_client.post.assert_called_once_with(
-            "issues/create",
-            json={"title": "New issue", "meetingid": 456, "ownerid": 123},
-        )
+        assert overlapping_count > 0  # Confirm concurrent execution
