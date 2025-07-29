@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import builtins
 from typing import TYPE_CHECKING
 
-from ...models import ArchivedGoalInfo, CreatedGoalInfo, GoalInfo, GoalListResponse
+from ...models import (
+    ArchivedGoalInfo,
+    BulkCreateError,
+    BulkCreateResult,
+    CreatedGoalInfo,
+    GoalInfo,
+    GoalListResponse,
+)
 from ...utils.async_base_operations import AsyncBaseOperations
 
 if TYPE_CHECKING:
@@ -227,3 +235,103 @@ class AsyncGoalOperations(AsyncBaseOperations):
             )
             for goal in data
         ]
+
+    async def create_many(
+        self, goals: builtins.list[dict[str, Any]], max_concurrent: int = 5
+    ) -> BulkCreateResult[CreatedGoalInfo]:
+        """Create multiple goals concurrently in a best-effort manner.
+
+        Processes goals concurrently with a configurable limit to avoid rate limiting.
+        Failed operations are captured and returned alongside successful ones.
+
+        Args:
+            goals: List of dictionaries containing goal data. Each dict should have:
+                - title (required): Title of the goal
+                - meeting_id (required): ID of the associated meeting
+                - user_id (optional): ID of the responsible user (defaults to
+                    current user)
+            max_concurrent: Maximum number of concurrent API requests (default: 5)
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of CreatedGoalInfo instances for successful creations
+                - failed: List of BulkCreateError instances for failed creations
+
+
+        Example:
+            ```python
+            result = await client.goal.create_many([
+                {"title": "Q1 Revenue Target", "meeting_id": 123},
+                {"title": "Product Launch", "meeting_id": 123, "user_id": 456}
+            ])
+
+            print(f"Created {len(result.successful)} goals")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        # Create a semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def create_single_goal(
+            index: int, goal_data: dict[str, Any]
+        ) -> tuple[int, CreatedGoalInfo | BulkCreateError]:
+            """Create a single goal with error handling.
+
+            Returns:
+                Tuple of (index, result) where result is either CreatedGoalInfo
+                or BulkCreateError.
+
+            Raises:
+                ValueError: When required parameters are missing.
+
+            """
+            async with semaphore:
+                try:
+                    # Extract parameters from the goal data
+                    title = goal_data.get("title")
+                    meeting_id = goal_data.get("meeting_id")
+                    user_id = goal_data.get("user_id")
+
+                    # Validate required parameters
+                    if title is None:
+                        raise ValueError("title is required")
+                    if meeting_id is None:
+                        raise ValueError("meeting_id is required")
+
+                    # Create the goal
+                    created_goal = await self.create(
+                        title=title, meeting_id=meeting_id, user_id=user_id
+                    )
+                    return (index, created_goal)
+
+                except Exception as e:
+                    error = BulkCreateError(
+                        index=index, input_data=goal_data, error=str(e)
+                    )
+                    return (index, error)
+
+        # Create tasks for all goals
+        tasks = [
+            create_single_goal(index, goal_data)
+            for index, goal_data in enumerate(goals)
+        ]
+
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks)
+
+        # Sort results to maintain order
+        results.sort(key=lambda x: x[0])
+
+        # Separate successful and failed results
+        successful: builtins.list[CreatedGoalInfo] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for _, result in results:
+            if isinstance(result, CreatedGoalInfo):
+                successful.append(result)
+            else:
+                failed.append(result)
+
+        return BulkCreateResult(successful=successful, failed=failed)
