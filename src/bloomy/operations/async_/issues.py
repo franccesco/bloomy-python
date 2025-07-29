@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import builtins
 from typing import TYPE_CHECKING
 
-from ...models import CreatedIssue, IssueDetails, IssueListItem
+from ...models import (
+    BulkCreateError,
+    BulkCreateResult,
+    CreatedIssue,
+    IssueDetails,
+    IssueListItem,
+)
 from ...utils.async_base_operations import AsyncBaseOperations
 
 if TYPE_CHECKING:
+    from typing import Any
+
     import httpx
 
 
@@ -153,3 +162,105 @@ class AsyncIssueOperations(AsyncBaseOperations):
             user_id=data["Owner"]["Id"],
             notes_url=data["DetailsUrl"],
         )
+
+    async def create_many(
+        self, issues: builtins.list[dict[str, Any]], max_concurrent: int = 5
+    ) -> BulkCreateResult[CreatedIssue]:
+        """Create multiple issues concurrently in a best-effort manner.
+
+        Uses asyncio to process multiple issue creations concurrently with rate
+        limiting.
+        Failed operations are captured and returned alongside successful ones.
+
+        Args:
+            issues: List of dictionaries containing issue data. Each dict should have:
+                - meeting_id (required): ID of the associated meeting
+                - title (required): Title of the issue
+                - user_id (optional): ID of the issue owner (defaults to current user)
+                - notes (optional): Additional notes for the issue
+            max_concurrent: Maximum number of concurrent requests (default: 5)
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of CreatedIssue instances for successful creations
+                - failed: List of BulkCreateError instances for failed creations
+
+
+        Example:
+            ```python
+            result = await client.issue.create_many([
+                {"meeting_id": 123, "title": "Issue 1", "notes": "Details"},
+                {"meeting_id": 123, "title": "Issue 2", "user_id": 456}
+            ])
+
+            print(f"Created {len(result.successful)} issues")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        # Create a semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def create_single_issue(
+            index: int, issue_data: dict[str, Any]
+        ) -> tuple[int, CreatedIssue | BulkCreateError]:
+            """Create a single issue with error handling.
+
+            Returns:
+                Tuple of (index, result) where result is either CreatedIssue
+                or BulkCreateError.
+
+            Raises:
+                ValueError: When required parameters are missing.
+
+            """
+            async with semaphore:
+                try:
+                    # Extract parameters from the issue data
+                    meeting_id = issue_data.get("meeting_id")
+                    title = issue_data.get("title")
+                    user_id = issue_data.get("user_id")
+                    notes = issue_data.get("notes")
+
+                    # Validate required parameters
+                    if meeting_id is None:
+                        raise ValueError("meeting_id is required")
+                    if title is None:
+                        raise ValueError("title is required")
+
+                    # Create the issue
+                    created_issue = await self.create(
+                        meeting_id=meeting_id, title=title, user_id=user_id, notes=notes
+                    )
+                    return (index, created_issue)
+
+                except Exception as e:
+                    error = BulkCreateError(
+                        index=index, input_data=issue_data, error=str(e)
+                    )
+                    return (index, error)
+
+        # Create tasks for all issues
+        tasks = [
+            create_single_issue(index, issue_data)
+            for index, issue_data in enumerate(issues)
+        ]
+
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks)
+
+        # Sort results to maintain order
+        results.sort(key=lambda x: x[0])
+
+        # Separate successful and failed results
+        successful: builtins.list[CreatedIssue] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for _, result in results:
+            if isinstance(result, CreatedIssue):
+                successful.append(result)
+            else:
+                failed.append(result)
+
+        return BulkCreateResult(successful=successful, failed=failed)

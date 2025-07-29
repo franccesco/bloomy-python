@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from ...exceptions import APIError
 from ...models import (
+    BulkCreateError,
+    BulkCreateResult,
     Issue,
     MeetingAttendee,
     MeetingDetails,
@@ -85,7 +87,15 @@ class AsyncMeetingOperations(AsyncBaseOperations):
         response.raise_for_status()
         data: Any = response.json()
 
-        return [MeetingAttendee.model_validate(attendee) for attendee in data]
+        # Map Id to UserId for compatibility
+        return [
+            MeetingAttendee.model_validate({
+                "UserId": attendee["Id"],
+                "Name": attendee["Name"],
+                "ImageUrl": attendee["ImageUrl"]
+            })
+            for attendee in data
+        ]
 
     async def issues(
         self, meeting_id: int, include_closed: bool = False
@@ -114,7 +124,23 @@ class AsyncMeetingOperations(AsyncBaseOperations):
         response.raise_for_status()
         data: Any = response.json()
 
-        return [Issue.model_validate(issue) for issue in data]
+        # Map meeting issue format to Issue model format
+        return [
+            Issue.model_validate({
+                "Id": issue["Id"],
+                "Name": issue["Name"],
+                "DetailsUrl": issue.get("DetailsUrl"),
+                "CreateDate": issue["CreateTime"],
+                "MeetingId": issue["OriginId"],
+                "MeetingName": issue["Origin"],
+                "OwnerName": issue["Owner"]["Name"],
+                "OwnerId": issue["Owner"]["Id"],
+                "OwnerImageUrl": issue["Owner"]["ImageUrl"],
+                "ClosedDate": issue.get("CloseTime"),
+                "CompletionDate": issue.get("CompleteTime"),
+            })
+            for issue in data
+        ]
 
     async def todos(
         self, meeting_id: int, include_closed: bool = False
@@ -328,3 +354,183 @@ class AsyncMeetingOperations(AsyncBaseOperations):
         response = await self._client.delete(f"L10/{meeting_id}")
         response.raise_for_status()
         return True
+
+    async def create_many(
+        self, meetings: builtins.list[dict[str, Any]], max_concurrent: int = 5
+    ) -> BulkCreateResult[dict[str, Any]]:
+        """Create multiple meetings concurrently in a best-effort manner.
+
+        Uses asyncio to process multiple meeting creations concurrently with rate
+        limiting.
+        Failed operations are captured and returned alongside successful ones.
+
+        Args:
+            meetings: List of dictionaries containing meeting data. Each dict
+                should have:
+                - title (required): Title of the meeting
+                - add_self (optional): Whether to add current user as attendee
+                    (default: True)
+                - attendees (optional): List of user IDs to add as attendees
+            max_concurrent: Maximum number of concurrent requests (default: 5)
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of dicts with meeting_id, title, and attendees
+                - failed: List of BulkCreateError instances for failed creations
+
+
+        Example:
+            ```python
+            result = await client.meeting.create_many([
+                {"title": "Weekly Team Meeting", "attendees": [2, 3]},
+                {"title": "1:1 Meeting", "add_self": False}
+            ])
+
+            print(f"Created {len(result.successful)} meetings")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        # Create a semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def create_single_meeting(
+            index: int, meeting_data: dict[str, Any]
+        ) -> tuple[int, dict[str, Any] | BulkCreateError]:
+            """Create a single meeting with error handling.
+
+            Returns:
+                Tuple of (index, result) where result is either dict or
+                BulkCreateError.
+
+            Raises:
+                ValueError: When required parameters are missing.
+
+            """
+            async with semaphore:
+                try:
+                    # Extract parameters from the meeting data
+                    title = meeting_data.get("title")
+                    add_self = meeting_data.get("add_self", True)
+                    attendees = meeting_data.get("attendees")
+
+                    # Validate required parameters
+                    if title is None:
+                        raise ValueError("title is required")
+
+                    # Create the meeting
+                    created_meeting = await self.create(
+                        title=title, add_self=add_self, attendees=attendees
+                    )
+                    return (index, created_meeting)
+
+                except Exception as e:
+                    error = BulkCreateError(
+                        index=index, input_data=meeting_data, error=str(e)
+                    )
+                    return (index, error)
+
+        # Create tasks for all meetings
+        tasks = [
+            create_single_meeting(index, meeting_data)
+            for index, meeting_data in enumerate(meetings)
+        ]
+
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks)
+
+        # Sort results to maintain order
+        results.sort(key=lambda x: x[0])
+
+        # Separate successful and failed results
+        successful: builtins.list[dict[str, Any]] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for _, result in results:
+            if isinstance(result, dict):
+                successful.append(result)
+            else:
+                failed.append(result)
+
+        return BulkCreateResult(successful=successful, failed=failed)
+
+    async def get_many(
+        self, meeting_ids: list[int], max_concurrent: int = 5
+    ) -> BulkCreateResult[MeetingDetails]:
+        """Retrieve details for multiple meetings concurrently in a best-effort manner.
+
+        Uses asyncio to process multiple meeting detail retrievals concurrently with
+        rate limiting. Failed operations are captured and returned alongside
+        successful ones.
+
+        Args:
+            meeting_ids: List of meeting IDs to retrieve details for
+            max_concurrent: Maximum number of concurrent requests (default: 5)
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of MeetingDetails instances for successfully
+                  retrieved meetings
+                - failed: List of BulkCreateError instances for failed retrievals
+
+        Example:
+            ```python
+            result = await client.meeting.get_many([1, 2, 3])
+
+            print(f"Retrieved {len(result.successful)} meetings")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        # Create a semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def get_single_meeting(
+            index: int, meeting_id: int
+        ) -> tuple[int, MeetingDetails | BulkCreateError]:
+            """Get details for a single meeting with error handling.
+
+            Returns:
+                Tuple of (index, result) where result is either MeetingDetails
+                or BulkCreateError.
+
+            """
+            async with semaphore:
+                try:
+                    # Use the existing details method to get meeting details
+                    meeting_details = await self.details(meeting_id)
+                    return (index, meeting_details)
+
+                except Exception as e:
+                    error = BulkCreateError(
+                        index=index,
+                        input_data={"meeting_id": meeting_id},
+                        error=str(e),
+                    )
+                    return (index, error)
+
+        # Create tasks for all meeting IDs
+        tasks = [
+            get_single_meeting(index, meeting_id)
+            for index, meeting_id in enumerate(meeting_ids)
+        ]
+
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks)
+
+        # Sort results to maintain order
+        results.sort(key=lambda x: x[0])
+
+        # Separate successful and failed results
+        successful: builtins.list[MeetingDetails] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for _, result in results:
+            if isinstance(result, MeetingDetails):
+                successful.append(result)
+            else:
+                failed.append(result)
+
+        return BulkCreateResult(successful=successful, failed=failed)

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import builtins
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ...models import Todo
+from ...models import BulkCreateError, BulkCreateResult, Todo
 from ...utils.async_base_operations import AsyncBaseOperations
 
 if TYPE_CHECKING:
@@ -123,9 +124,16 @@ class AsyncTodoOperations(AsyncBaseOperations):
             payload["dueDate"] = due_date
 
         if meeting_id is not None:
-            # Meeting todo
-            payload["meetingid"] = meeting_id
-            response = await self._client.post("todo/createmeetingtodo", json=payload)
+            # Meeting todo - use the correct endpoint
+            payload = {
+                "Title": title,
+                "ForId": user_id,
+            }
+            if notes is not None:
+                payload["Notes"] = notes
+            if due_date is not None:
+                payload["dueDate"] = due_date
+            response = await self._client.post(f"L10/{meeting_id}/todos", json=payload)
         else:
             # User todo
             response = await self._client.post("todo/create", json=payload)
@@ -258,3 +266,111 @@ class AsyncTodoOperations(AsyncBaseOperations):
         todo = response.json()
 
         return Todo.model_validate(todo)
+
+    async def create_many(
+        self, todos: builtins.list[dict[str, Any]], max_concurrent: int = 5
+    ) -> BulkCreateResult[Todo]:
+        """Create multiple todos concurrently in a best-effort manner.
+
+        Uses asyncio to process multiple todo creations concurrently with rate limiting.
+        Failed operations are captured and returned alongside successful ones.
+
+        Args:
+            todos: List of dictionaries containing todo data. Each dict should have:
+                - title (required): Title of the todo
+                - meeting_id (required): ID of the associated meeting
+                - due_date (optional): Due date in string format
+                - user_id (optional): ID of the responsible user (defaults to
+                    current user)
+                - notes (optional): Additional notes for the todo
+            max_concurrent: Maximum number of concurrent requests (default: 5)
+
+        Returns:
+            BulkCreateResult containing:
+                - successful: List of Todo instances for successful creations
+                - failed: List of BulkCreateError instances for failed creations
+
+
+        Example:
+            ```python
+            result = await client.todo.create_many([
+                {"title": "Todo 1", "meeting_id": 123, "due_date": "2024-12-31"},
+                {"title": "Todo 2", "meeting_id": 123, "user_id": 456}
+            ])
+
+            print(f"Created {len(result.successful)} todos")
+            for error in result.failed:
+                print(f"Failed at index {error.index}: {error.error}")
+            ```
+
+        """
+        # Create a semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def create_single_todo(
+            index: int, todo_data: dict[str, Any]
+        ) -> tuple[int, Todo | BulkCreateError]:
+            """Create a single todo with error handling.
+
+            Returns:
+                Tuple of (index, result) where result is either Todo or
+                BulkCreateError.
+
+            Raises:
+                ValueError: When required parameters are missing.
+
+            """
+            async with semaphore:
+                try:
+                    # Extract parameters from the todo data
+                    title = todo_data.get("title")
+                    meeting_id = todo_data.get("meeting_id")
+                    due_date = todo_data.get("due_date")
+                    user_id = todo_data.get("user_id")
+                    notes = todo_data.get("notes")
+
+                    # Validate required parameters
+                    if title is None:
+                        raise ValueError("title is required")
+                    if meeting_id is None:
+                        raise ValueError("meeting_id is required")
+
+                    # Create the todo
+                    created_todo = await self.create(
+                        title=title,
+                        meeting_id=meeting_id,
+                        due_date=due_date,
+                        user_id=user_id,
+                        notes=notes,
+                    )
+                    return (index, created_todo)
+
+                except Exception as e:
+                    error = BulkCreateError(
+                        index=index, input_data=todo_data, error=str(e)
+                    )
+                    return (index, error)
+
+        # Create tasks for all todos
+        tasks = [
+            create_single_todo(index, todo_data)
+            for index, todo_data in enumerate(todos)
+        ]
+
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks)
+
+        # Sort results to maintain order
+        results.sort(key=lambda x: x[0])
+
+        # Separate successful and failed results
+        successful: builtins.list[Todo] = []
+        failed: builtins.list[BulkCreateError] = []
+
+        for _, result in results:
+            if isinstance(result, Todo):
+                successful.append(result)
+            else:
+                failed.append(result)
+
+        return BulkCreateResult(successful=successful, failed=failed)
