@@ -2,6 +2,34 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development Commands
+
+```bash
+# Install dependencies
+uv sync --all-extras
+
+# Run all tests with coverage
+uv run pytest
+
+# Run a single test file
+uv run pytest tests/test_users.py
+
+# Run a specific test
+uv run pytest tests/test_users.py::test_user_details -v
+
+# Format code
+uv run ruff format .
+
+# Lint and auto-fix
+uv run ruff check . --fix
+
+# Type checking (strict mode)
+uv run pyright
+
+# Build documentation
+uv run mkdocs serve
+```
+
 ## Architecture Overview
 
 ### SDK Structure
@@ -22,10 +50,17 @@ The Bloomy Python SDK is organized as a client-based architecture where all API 
 
 3. **Operations Pattern**:
    - Each API resource has its own operations class (e.g., `UserOperations`, `MeetingOperations`)
-   - All operation classes inherit from `BaseOperations` which provides lazy-loaded user ID
+   - Sync operations in `src/bloomy/operations/` inherit from `BaseOperations`
+   - Async operations in `src/bloomy/operations/async_/` inherit from `AsyncBaseOperations`
+   - Both inherit from `AbstractOperations` which provides shared logic
    - Operations are accessed via client attributes: `client.user`, `client.meeting`, etc.
 
-4. **API Endpoints**:
+4. **Models (`src/bloomy/models.py`)**:
+   - Pydantic models for type-safe API responses
+   - All models inherit from `BloomyBaseModel` with common config
+   - Field aliases map PascalCase API responses to snake_case Python attributes
+
+5. **API Endpoints**:
    - Base URL: `https://app.bloomgrowth.com/api/v1`
    - Authentication: Bearer token in Authorization header
    - All responses are JSON
@@ -41,9 +76,9 @@ The Bloomy Python SDK is organized as a client-based architecture where all API 
    - `APIError` includes status code
    - HTTP errors are raised via `response.raise_for_status()`
 
-4. **Type Annotations**: Uses Python 3.12+ union syntax (`|`) and TypedDict for structured return types.
+4. **Type Annotations**: Uses Python 3.12+ union syntax (`|`) and Pydantic models for structured return types.
 
-5. **Testing**: Mock-based testing with `unittest.mock`. Fixtures defined in `conftest.py` provide sample data and mock HTTP client.
+5. **Testing**: Mock-based testing with `unittest.mock`. Fixtures in `tests/conftest.py` provide sample data and mock HTTP client. Use `pytest-asyncio` for async tests.
 
 ### API Operations Reference
 
