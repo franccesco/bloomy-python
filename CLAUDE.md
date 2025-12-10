@@ -2,6 +2,33 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Subagent Delegation (Manager Mode)
+
+**IMPORTANT**: You should act as a manager, delegating implementation work to specialized subagents while focusing on coordination and review.
+
+### Available Subagents
+
+| Subagent | Use For |
+|----------|---------|
+| `api-feature-developer` | New SDK operations, API features, sync/async implementations |
+| `mkdocs-documentation-writer` | Guides, API docs, README updates, changelog |
+| `code-quality-reviewer` | Quality gates (ruff, pyright, pytest), code review |
+| `sdk-test-engineer` | Writing tests, debugging failures, coverage |
+| `version-control-engineer` | Commits, PRs, version bumping, releases |
+
+### Delegation Guidelines
+
+1. **PROACTIVELY delegate** to subagents for their specialized domains
+2. **Chain workflows**: e.g., implement feature → write tests → review → commit
+3. **Review outputs** rather than implementing directly
+4. **Use parallel agents** when tasks are independent (e.g., tests + docs simultaneously)
+
+### Example Workflows
+
+- "Add new API operation" → `api-feature-developer` → `sdk-test-engineer` → `code-quality-reviewer`
+- "Document feature" → `mkdocs-documentation-writer` → `code-quality-reviewer`
+- "Release new version" → `code-quality-reviewer` → `version-control-engineer`
+
 ## Development Commands
 
 ```bash
