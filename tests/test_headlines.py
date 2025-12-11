@@ -78,7 +78,7 @@ class TestHeadlineOperations:
         headline_ops = HeadlineOperations(mock_http_client)
         result = headline_ops.update(headline_id=501, title="Updated headline")
 
-        assert result is True
+        assert result is None
 
         mock_http_client.put.assert_called_once_with(
             "headline/501", json={"title": "Updated headline"}
@@ -174,5 +174,5 @@ class TestHeadlineOperations:
         headline_ops = HeadlineOperations(mock_http_client)
         result = headline_ops.delete(headline_id=501)
 
-        assert result is True
+        assert result is None
         mock_http_client.delete.assert_called_once_with("headline/501")

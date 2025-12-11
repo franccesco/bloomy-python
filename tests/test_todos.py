@@ -91,27 +91,55 @@ class TestTodoOperations:
 
     def test_complete_todo(self, mock_http_client: Mock) -> None:
         """Test completing a todo."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"success": True}
-        mock_response.is_success = True
-        mock_http_client.post.return_value = mock_response
+        # Mock complete response
+        mock_complete_response = Mock()
+        mock_complete_response.is_success = True
+
+        # Mock details response
+        mock_details_response = Mock()
+        mock_details_response.json.return_value = {
+            "Id": 789,
+            "Name": "Completed Todo",
+            "DetailsUrl": "https://example.com/todo/789",
+            "DueDate": "2024-12-31",
+            "CreateTime": "2024-01-01T10:00:00Z",
+            "CompleteTime": "2024-12-10T10:00:00Z",
+            "Complete": True,
+        }
+        mock_details_response.is_success = True
+
+        mock_http_client.post.return_value = mock_complete_response
+        mock_http_client.get.return_value = mock_details_response
 
         todo_ops = TodoOperations(mock_http_client)
         result = todo_ops.complete(todo_id=789)
 
-        assert result is True
+        assert result.id == 789
+        assert result.complete is True
         mock_http_client.post.assert_called_once_with("todo/789/complete?status=true")
+        mock_http_client.get.assert_called_once_with("todo/789")
 
     def test_update_todo(self, mock_http_client: Mock) -> None:
         """Test updating a todo."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
+        # Mock update response
+        mock_update_response = Mock()
+        mock_update_response.status_code = 200
+
+        # Mock details response
+        mock_details_response = Mock()
+        mock_details_response.json.return_value = {
             "Id": 789,
             "Name": "Updated Todo",
+            "DetailsUrl": "https://example.com/todo/789",
             "DueDate": "2024-11-01",
+            "CreateTime": "2024-01-01T10:00:00Z",
+            "CompleteTime": None,
+            "Complete": False,
         }
-        mock_response.status_code = 200
-        mock_http_client.put.return_value = mock_response
+        mock_details_response.is_success = True
+
+        mock_http_client.put.return_value = mock_update_response
+        mock_http_client.get.return_value = mock_details_response
 
         todo_ops = TodoOperations(mock_http_client)
         result = todo_ops.update(
@@ -126,6 +154,7 @@ class TestTodoOperations:
         mock_http_client.put.assert_called_once_with(
             "todo/789", json={"title": "Updated Todo", "dueDate": "2024-11-01"}
         )
+        mock_http_client.get.assert_called_once_with("todo/789")
 
     def test_update_todo_no_fields(self, mock_http_client: Mock) -> None:
         """Test updating todo with no fields raises error."""

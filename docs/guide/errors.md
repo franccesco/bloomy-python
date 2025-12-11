@@ -94,7 +94,7 @@ from bloomy import Client, APIError, ConfigurationError
 
 try:
     client = Client()
-    users = client.user.all()
+    users = client.user.list()
 except ConfigurationError:
     print("Please configure your API key")
 except APIError as e:
@@ -151,7 +151,7 @@ def retry_with_backoff(func, max_retries=3, initial_delay=1):
 
 # Usage
 client = Client(api_key="your-api-key")
-users = retry_with_backoff(lambda: client.user.all())
+users = retry_with_backoff(lambda: client.user.list())
 ```
 
 ### Graceful Degradation
@@ -224,7 +224,7 @@ logger = logging.getLogger('bloomy_app')
 client = Client(api_key="your-api-key")
 
 try:
-    users = client.user.all()
+    users = client.user.list()
     logger.info(f"Successfully fetched {len(users)} users")
 except APIError as e:
     logger.error(
@@ -258,7 +258,7 @@ def handle_api_errors(default=None):
 
 # Usage
 with handle_api_errors(default=[]):
-    users = client.user.all()
+    users = client.user.list()
 ```
 
 ## Best Practices
@@ -302,7 +302,7 @@ from bloomy import Client
 
 try:
     client = Client(api_key="your-api-key")
-    users = client.user.all()
+    users = client.user.list()
 except httpx.TimeoutException:
     print("Request timed out. Please try again.")
 ```

@@ -103,21 +103,69 @@ class AsyncIssueOperations(AsyncBaseOperations):
             for issue in data
         ]
 
-    async def solve(self, issue_id: int) -> bool:
+    async def complete(self, issue_id: int) -> IssueDetails:
         """Mark an issue as completed/solved.
 
         Args:
-            issue_id: Unique identifier of the issue to be solved
+            issue_id: Unique identifier of the issue to be completed
 
         Returns:
-            True if issue was successfully solved
+            The updated IssueDetails
+
+        Example:
+            ```python
+            completed_issue = await client.issue.complete(123)
+            print(completed_issue.completed_at)
+            ```
 
         """
         response = await self._client.post(
             f"issues/{issue_id}/complete", json={"complete": True}
         )
         response.raise_for_status()
-        return True
+        return await self.details(issue_id)
+
+    async def update(
+        self,
+        issue_id: int,
+        title: str | None = None,
+        notes: str | None = None,
+    ) -> IssueDetails:
+        """Update an existing issue.
+
+        Args:
+            issue_id: The ID of the issue to update
+            title: New title for the issue (optional)
+            notes: New notes for the issue (optional)
+
+        Returns:
+            The updated IssueDetails
+
+        Raises:
+            ValueError: If no update fields are provided
+
+        Example:
+            ```python
+            updated = await client.issue.update(123, title="New Title")
+            print(updated.title)
+            ```
+
+        """
+        if title is None and notes is None:
+            raise ValueError(
+                "At least one field (title or notes) must be provided for update"
+            )
+
+        payload: dict[str, Any] = {}
+        if title is not None:
+            payload["title"] = title
+        if notes is not None:
+            payload["notes"] = notes
+
+        response = await self._client.put(f"issues/{issue_id}", json=payload)
+        response.raise_for_status()
+
+        return await self.details(issue_id)
 
     async def create(
         self,

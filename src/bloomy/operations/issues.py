@@ -110,19 +110,19 @@ class IssueOperations(BaseOperations):
             for issue in data
         ]
 
-    def solve(self, issue_id: int) -> bool:
+    def complete(self, issue_id: int) -> IssueDetails:
         """Mark an issue as completed/solved.
 
         Args:
-            issue_id: Unique identifier of the issue to be solved
+            issue_id: Unique identifier of the issue to be completed
 
         Returns:
-            True if issue was successfully solved
+            The updated IssueDetails
 
         Example:
             ```python
-            client.issue.solve(123)
-            # Returns: True
+            completed_issue = client.issue.complete(123)
+            print(completed_issue.completed_at)
             ```
 
         """
@@ -130,7 +130,49 @@ class IssueOperations(BaseOperations):
             f"issues/{issue_id}/complete", json={"complete": True}
         )
         response.raise_for_status()
-        return True
+        return self.details(issue_id)
+
+    def update(
+        self,
+        issue_id: int,
+        title: str | None = None,
+        notes: str | None = None,
+    ) -> IssueDetails:
+        """Update an existing issue.
+
+        Args:
+            issue_id: The ID of the issue to update
+            title: New title for the issue (optional)
+            notes: New notes for the issue (optional)
+
+        Returns:
+            The updated IssueDetails
+
+        Raises:
+            ValueError: If no update fields are provided
+
+        Example:
+            ```python
+            updated = client.issue.update(123, title="New Title")
+            print(updated.title)
+            ```
+
+        """
+        if title is None and notes is None:
+            raise ValueError(
+                "At least one field (title or notes) must be provided for update"
+            )
+
+        payload: dict[str, Any] = {}
+        if title is not None:
+            payload["title"] = title
+        if notes is not None:
+            payload["notes"] = notes
+
+        response = self._client.put(f"issues/{issue_id}", json=payload)
+        response.raise_for_status()
+
+        return self.details(issue_id)
 
     def create(
         self,

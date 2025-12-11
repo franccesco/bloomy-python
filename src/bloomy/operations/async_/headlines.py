@@ -68,21 +68,17 @@ class AsyncHeadlineOperations(AsyncBaseOperations):
             notes_url=data.get("DetailsUrl", ""),
         )
 
-    async def update(self, headline_id: int, title: str) -> bool:
+    async def update(self, headline_id: int, title: str) -> None:
         """Update a headline.
 
         Args:
             headline_id: The ID of the headline to update
             title: The new title of the headline
 
-        Returns:
-            True if update was successful
-
         """
         payload = {"title": title}
         response = await self._client.put(f"headline/{headline_id}", json=payload)
         response.raise_for_status()
-        return True
 
     async def details(self, headline_id: int) -> HeadlineDetails:
         """Get headline details.
@@ -166,16 +162,12 @@ class AsyncHeadlineOperations(AsyncBaseOperations):
             for headline in data
         ]
 
-    async def delete(self, headline_id: int) -> bool:
+    async def delete(self, headline_id: int) -> None:
         """Delete a headline.
 
         Args:
             headline_id: The ID of the headline to delete
 
-        Returns:
-            True if the deletion was successful
-
         """
         response = await self._client.delete(f"headline/{headline_id}")
         response.raise_for_status()
-        return True

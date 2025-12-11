@@ -46,13 +46,14 @@ The async version `AsyncUserOperations` provides the same methods as above, but 
             print(f"Found: {user.name}")
         
         # Get all users
-        all_users = client.user.all()
-        
+        all_users = client.user.list()
+
         # Get user with direct reports and positions
         user_full = client.user.details(
-            user_id=123, 
+            user_id=123,
             include_direct_reports=True,
-            include_positions=True
+            include_positions=True,
+            include_all=True
         )
     ```
 
@@ -74,13 +75,14 @@ The async version `AsyncUserOperations` provides the same methods as above, but 
                 print(f"Found: {user.name}")
             
             # Get all users
-            all_users = await client.user.all()
-            
+            all_users = await client.user.list()
+
             # Get user with direct reports and positions
             user_full = await client.user.details(
-                user_id=123, 
+                user_id=123,
                 include_direct_reports=True,
-                include_positions=True
+                include_positions=True,
+                include_all=True
             )
     
     asyncio.run(main())
@@ -90,8 +92,8 @@ The async version `AsyncUserOperations` provides the same methods as above, but 
 
 | Method | Description | Parameters |
 |--------|-------------|------------|
-| `details()` | Get detailed information about a user | `user_id`, `include_direct_reports`, `include_positions`, `all` |
+| `details()` | Get detailed information about a user | `user_id`, `include_direct_reports`, `include_positions`, `include_all` |
 | `search()` | Search for users by name or email | `term` |
-| `all()` | Get all users in the system | `include_placeholders` |
+| `list()` | Get all users in the system | `include_placeholders` |
 | `direct_reports()` | Get direct reports for a user | `user_id` |
 | `positions()` | Get positions held by a user | `user_id` |

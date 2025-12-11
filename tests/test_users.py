@@ -63,7 +63,7 @@ class TestUserOperations:
         assert len(result.direct_reports) == 1
         assert result.direct_reports[0].id == 456
 
-    def test_details_with_all(
+    def test_details_with_include_all(
         self, mock_http_client: Mock, sample_user_data: dict[str, Any]
     ) -> None:
         """Test getting user details with all information."""
@@ -86,7 +86,7 @@ class TestUserOperations:
         ]
 
         user_ops = UserOperations(mock_http_client)
-        result = user_ops.details(user_id=123, all=True)
+        result = user_ops.details(user_id=123, include_all=True)
 
         assert result.direct_reports is not None
         assert result.positions is not None
@@ -117,7 +117,7 @@ class TestUserOperations:
         ]
 
         user_ops = UserOperations(mock_http_client)
-        result = user_ops.details(user_id=123, all=True)
+        result = user_ops.details(user_id=123, include_all=True)
 
         assert result.direct_reports is not None
         assert result.positions is not None
@@ -223,7 +223,7 @@ class TestUserOperations:
             "search/user", params={"term": "john"}
         )
 
-    def test_all_users(self, mock_http_client: Mock) -> None:
+    def test_list_users(self, mock_http_client: Mock) -> None:
         """Test getting all users."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -248,14 +248,14 @@ class TestUserOperations:
         mock_http_client.get.return_value = mock_response
 
         user_ops = UserOperations(mock_http_client)
-        result = user_ops.all()
+        result = user_ops.list()
 
         # Should only return non-placeholder users
         assert len(result) == 1
         assert result[0].id == 123
 
         # Test with placeholders included
-        result_with_placeholders = user_ops.all(include_placeholders=True)
+        result_with_placeholders = user_ops.list(include_placeholders=True)
         assert len(result_with_placeholders) == 2
 
         mock_http_client.get.assert_called_with("search/all", params={"term": "%"})

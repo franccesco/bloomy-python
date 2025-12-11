@@ -54,13 +54,13 @@ The async version `AsyncHeadlineOperations` provides the same methods as above, 
         # List headlines for a specific meeting
         meeting_headlines = client.headline.list(meeting_id=123)
         
-        # Update headline title
+        # Update headline title (returns None)
         client.headline.update(
             headline_id=headline.id,
             title="Product launch exceeded expectations"
         )
-        
-        # Delete headline
+
+        # Delete headline (returns None)
         client.headline.delete(headline_id=headline.id)
     ```
 
@@ -90,13 +90,13 @@ The async version `AsyncHeadlineOperations` provides the same methods as above, 
             # List headlines for a specific meeting
             meeting_headlines = await client.headline.list(meeting_id=123)
             
-            # Update headline title
+            # Update headline title (returns None)
             await client.headline.update(
                 headline_id=headline.id,
                 title="Product launch exceeded expectations"
             )
-            
-            # Delete headline
+
+            # Delete headline (returns None)
             await client.headline.delete(headline_id=headline.id)
     
     asyncio.run(main())
@@ -114,3 +114,6 @@ The async version `AsyncHeadlineOperations` provides the same methods as above, 
 
 !!! note "Filtering"
     Like todos, headlines can be filtered by either `user_id` or `meeting_id`, but not both.
+
+!!! note "Return Values"
+    The `update()` and `delete()` methods return `None` instead of boolean values.

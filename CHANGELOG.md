@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2025-12-10
+
+### Added
+
+- `client.issue.update()` method for updating existing issues
+- `client.scorecard.get()` method for retrieving scorecard details
+- `GoalStatus` enum for type-safe status values
+- `base_url` and `timeout` parameters to sync `Client` for configuration flexibility
+- AsyncClient now validates API key at initialization
+
+### Changed
+
+- **BREAKING**: `client.user.all()` renamed to `client.user.list()` for consistency
+- **BREAKING**: `client.user.details(all=True)` renamed to `client.user.details(include_all=True)` for clarity
+- **BREAKING**: `client.issue.solve()` renamed to `client.issue.complete()` and now returns `IssueDetails`
+- **BREAKING**: `client.todo.complete()` now returns `Todo` instead of `bool`
+- **BREAKING**: `client.goal.update/delete/archive/restore()` now return `None` instead of `bool`
+- **BREAKING**: `client.headline.update/delete()` now return `None` instead of `bool`
+- **BREAKING**: Client raises `ConfigurationError` instead of `ValueError` for missing API key
+
+### Fixed
+
+- All documentation updated to reflect the breaking changes
+
 ## [0.19.0] - 2025-12-10
 
 ### Fixed
@@ -192,7 +216,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration management with multiple API key sources
 - httpx-based HTTP client with bearer token authentication
 
-[Unreleased]: https://github.com/franccesco/bloomy-python/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/franccesco/bloomy-python/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/franccesco/bloomy-python/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/franccesco/bloomy-python/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/franccesco/bloomy-python/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/franccesco/bloomy-python/compare/v0.16.0...v0.17.0

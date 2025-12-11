@@ -58,9 +58,10 @@ The async version `AsyncTodoOperations` provides the same methods as above, but 
             due_date="2024-12-15"
         )
         
-        # Mark a todo as complete
-        client.todo.complete(todo_id=new_todo.id)
-        
+        # Mark a todo as complete (returns the completed Todo)
+        completed_todo = client.todo.complete(todo_id=new_todo.id)
+        print(f"Completed: {completed_todo.title} at {completed_todo.complete_time}")
+
         # Delete a todo
         client.todo.delete(todo_id=new_todo.id)
     ```
@@ -95,9 +96,10 @@ The async version `AsyncTodoOperations` provides the same methods as above, but 
                 due_date="2024-12-15"
             )
             
-            # Mark a todo as complete
-            await client.todo.complete(todo_id=new_todo.id)
-            
+            # Mark a todo as complete (returns the completed Todo)
+            completed_todo = await client.todo.complete(todo_id=new_todo.id)
+            print(f"Completed: {completed_todo.title} at {completed_todo.complete_time}")
+
             # Delete a todo
             await client.todo.delete(todo_id=new_todo.id)
     

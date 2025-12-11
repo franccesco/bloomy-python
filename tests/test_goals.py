@@ -106,7 +106,7 @@ class TestGoalOperations:
         goal_ops = GoalOperations(mock_http_client)
         result = goal_ops.delete(goal_id=101)
 
-        assert result is True
+        assert result is None
         mock_http_client.delete.assert_called_once_with("rocks/101")
 
     def test_update_goal(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
@@ -118,7 +118,7 @@ class TestGoalOperations:
 
         result = goal_ops.update(goal_id=101, title="Updated Goal", status="complete")
 
-        assert result is True
+        assert result is None
         mock_http_client.put.assert_called_once_with(
             "rocks/101",
             json={
@@ -147,7 +147,7 @@ class TestGoalOperations:
         goal_ops = GoalOperations(mock_http_client)
         result = goal_ops.archive(goal_id=101)
 
-        assert result is True
+        assert result is None
         mock_http_client.put.assert_called_once_with("rocks/101/archive")
 
     def test_restore_goal(self, mock_http_client: Mock) -> None:
@@ -158,5 +158,5 @@ class TestGoalOperations:
         goal_ops = GoalOperations(mock_http_client)
         result = goal_ops.restore(goal_id=101)
 
-        assert result is True
+        assert result is None
         mock_http_client.put.assert_called_once_with("rocks/101/restore")
