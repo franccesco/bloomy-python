@@ -113,8 +113,9 @@ The async version `AsyncIssueOperations` provides the same methods as above, but
 | Method | Description | Parameters | Returns |
 |--------|-------------|------------|---------|
 | `details()` | Get detailed issue information | `issue_id` | `IssueDetails` |
-| `list()` | Get issues | `user_id`, `meeting_id` | `list[IssueDetails]` |
-| `create()` | Create a new issue | `meeting_id`, `title`, `user_id`, `notes` | `IssueDetails` |
+| `list()` | Get issues | `user_id`, `meeting_id` | `list[IssueListItem]` |
+| `create()` | Create a new issue | `meeting_id`, `title`, `user_id`, `notes` | `CreatedIssue` |
+| `create_many()` | Create multiple issues | `issues` | `BulkCreateResult[CreatedIssue]` |
 | `update()` | Update an existing issue | `issue_id`, `title`, `notes` | `IssueDetails` |
 | `complete()` | Mark an issue as solved | `issue_id` | `IssueDetails` |
 
@@ -171,3 +172,110 @@ The async version `AsyncIssueOperations` provides the same methods as above, but
 
 !!! note "Update Requirements"
     At least one of `title` or `notes` must be provided when calling `update()`. If neither is provided, a `ValueError` will be raised.
+
+## Bulk Operations
+
+### Creating Multiple Issues
+
+=== "Sync"
+
+    ```python
+    from bloomy import Client
+
+    with Client(api_key="your-api-key") as client:
+        # Create multiple issues at once
+        issues = [
+            {
+                "meeting_id": 123,
+                "title": "Server performance degradation",
+                "notes": "Response times increased by 50%"
+            },
+            {
+                "meeting_id": 123,
+                "title": "Database connection pool exhausted",
+                "user_id": 456,
+                "notes": "Max connections reached during peak hours"
+            },
+            {
+                "meeting_id": 789,
+                "title": "Authentication service timeout"
+            }
+        ]
+
+        result = client.issue.create_many(issues)
+
+        # Check results
+        print(f"Successfully created {len(result.successful)} issues")
+        for issue in result.successful:
+            print(f"- Issue #{issue.id}: {issue.title}")
+
+        # Handle failures
+        if result.failed:
+            print(f"Failed to create {len(result.failed)} issues")
+            for error in result.failed:
+                print(f"- Index {error.index}: {error.error}")
+                print(f"  Input: {error.input_data}")
+    ```
+
+=== "Async"
+
+    ```python
+    import asyncio
+    from bloomy import AsyncClient
+
+    async def main():
+        async with AsyncClient(api_key="your-api-key") as client:
+            # Create multiple issues concurrently
+            issues = [
+                {
+                    "meeting_id": 123,
+                    "title": "Server performance degradation",
+                    "notes": "Response times increased by 50%"
+                },
+                {
+                    "meeting_id": 123,
+                    "title": "Database connection pool exhausted",
+                    "user_id": 456,
+                    "notes": "Max connections reached during peak hours"
+                },
+                {
+                    "meeting_id": 789,
+                    "title": "Authentication service timeout"
+                }
+            ]
+
+            # Control concurrency with max_concurrent parameter
+            result = await client.issue.create_many(issues, max_concurrent=5)
+
+            # Check results
+            print(f"Successfully created {len(result.successful)} issues")
+            for issue in result.successful:
+                print(f"- Issue #{issue.id}: {issue.title}")
+
+            # Handle failures
+            if result.failed:
+                print(f"Failed to create {len(result.failed)} issues")
+                for error in result.failed:
+                    print(f"- Index {error.index}: {error.error}")
+                    print(f"  Input: {error.input_data}")
+
+    asyncio.run(main())
+    ```
+
+!!! info "Async Rate Limiting"
+    The async version of `create_many()` supports a `max_concurrent` parameter (default: 5) to control the maximum number of concurrent requests. This helps prevent rate limiting issues when creating large batches of issues.
+
+    ```python
+    # Process more items concurrently for better performance
+    result = await client.issue.create_many(issues, max_concurrent=10)
+
+    # Process items more slowly to avoid rate limits
+    result = await client.issue.create_many(issues, max_concurrent=2)
+    ```
+
+!!! tip "Bulk Operation Best Practices"
+    - **Best-effort approach**: `create_many()` continues processing even if some issues fail to create
+    - **Check both lists**: Always inspect both `result.successful` and `result.failed` to handle partial failures
+    - **Required fields**: Each issue dict must include `meeting_id` and `title`
+    - **Optional fields**: `user_id` defaults to the authenticated user if not provided
+    - **Error handling**: Failed creations include the original input data and error message for debugging

@@ -104,16 +104,19 @@ The async version `AsyncHeadlineOperations` provides the same methods as above, 
 
 ## Available Methods
 
-| Method | Description | Parameters |
-|--------|-------------|------------|
-| `create()` | Create a new headline | `meeting_id`, `title`, `owner_id`, `notes` |
-| `update()` | Update a headline title | `headline_id`, `title` |
-| `details()` | Get detailed headline information | `headline_id` |
-| `list()` | Get headlines | `user_id`, `meeting_id` |
-| `delete()` | Delete a headline | `headline_id` |
+| Method | Description | Required Parameters | Optional Parameters |
+|--------|-------------|---------------------|---------------------|
+| `create()` | Create a new headline | `meeting_id` (int), `title` (str) | `owner_id` (int, defaults to current user), `notes` (str) |
+| `update()` | Update a headline title | `headline_id` (int), `title` (str) | None |
+| `details()` | Get detailed headline information | `headline_id` (int) | None |
+| `list()` | Get headlines (defaults to current user) | None | `user_id` (int), `meeting_id` (int) |
+| `delete()` | Delete a headline | `headline_id` (int) | None |
 
 !!! note "Filtering"
     Like todos, headlines can be filtered by either `user_id` or `meeting_id`, but not both.
+
+!!! tip "Default Behavior"
+    When calling `list()` without parameters, it returns headlines for the current authenticated user. The `create()` method also defaults `owner_id` to the current user if not specified.
 
 !!! note "Return Values"
     The `update()` and `delete()` methods return `None` instead of boolean values.

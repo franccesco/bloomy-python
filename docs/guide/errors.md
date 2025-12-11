@@ -7,6 +7,7 @@ The Bloomy SDK provides a comprehensive error handling system to help you gracef
 ```
 BloomyError (base exception)
 ├── APIError (HTTP errors from API)
+├── AuthenticationError (authentication failures)
 └── ConfigurationError (configuration issues)
 ```
 
@@ -37,9 +38,29 @@ try:
     client = Client(api_key="invalid-key")
     user = client.user.details()
 except APIError as e:
-    print(f"API error: {e.message}")
+    print(f"API error: {e}")
     print(f"Status code: {e.status_code}")
-    print(f"Response body: {e.response_body}")
+```
+
+**Attributes:**
+- `status_code`: The HTTP status code (e.g., 404, 500)
+- Message accessed via `str(e)` or just `e` in f-strings
+
+### AuthenticationError
+
+Raised when username/password authentication fails:
+
+```python
+from bloomy import Configuration, AuthenticationError
+
+try:
+    config = Configuration()
+    config.configure_api_key(
+        username="invalid-user",
+        password="wrong-password"
+    )
+except AuthenticationError as e:
+    print(f"Authentication failed: {e}")
 ```
 
 ### ConfigurationError
@@ -228,11 +249,10 @@ try:
     logger.info(f"Successfully fetched {len(users)} users")
 except APIError as e:
     logger.error(
-        f"API request failed",
+        f"API request failed: {e}",
         extra={
             'status_code': e.status_code,
-            'message': e.message,
-            'response_body': e.response_body
+            'error_message': str(e)
         }
     )
     raise
@@ -253,7 +273,7 @@ def handle_api_errors(default=None):
     except APIError as e:
         if e.status_code == 404 and default is not None:
             return default
-        print(f"API Error: {e.message} (Status: {e.status_code})")
+        print(f"API Error: {e} (Status: {e.status_code})")
         raise
 
 # Usage
@@ -285,7 +305,8 @@ def handle_rate_limit(func, *args, **kwargs):
             return func(*args, **kwargs)
         except APIError as e:
             if e.status_code == 429:
-                retry_after = int(e.response_body.get('retry_after', 60))
+                # Wait before retrying (check response headers for Retry-After if available)
+                retry_after = 60  # Default wait time
                 print(f"Rate limited. Waiting {retry_after} seconds...")
                 time.sleep(retry_after)
             else:

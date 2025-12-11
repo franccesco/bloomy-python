@@ -236,10 +236,16 @@ from bloomy import Configuration
 config = Configuration()
 
 print("Configuration debugging:")
-print(f"Config file path: {config.config_path}")
-print(f"Config file exists: {config.config_path.exists()}")
-print(f"Has saved API key: {config.has_api_key()}")
+print(f"Has API key: {config.api_key is not None}")
 print(f"BG_API_KEY set: {'BG_API_KEY' in os.environ}")
+
+# Try to create a client and test authentication
+try:
+    from bloomy import Client
+    client = Client()
+    print("Authentication successful!")
+except Exception as e:
+    print(f"Authentication failed: {e}")
 ```
 
 ## Multi-Account Support

@@ -117,7 +117,7 @@ class MeetingOperations(BaseOperations):
                 DetailsUrl=issue["DetailsUrl"],
                 CreateDate=issue["CreateTime"],
                 ClosedDate=issue["CloseTime"],
-                CompletionDate=issue["CloseTime"],
+                CompletionDate=issue.get("CompleteTime"),
                 OwnerId=issue.get("Owner", {}).get("Id", 0),
                 OwnerName=issue.get("Owner", {}).get("Name", ""),
                 OwnerImageUrl=issue.get("Owner", {}).get("ImageUrl", ""),

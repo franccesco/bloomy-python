@@ -5,7 +5,7 @@ import importlib.metadata
 from .async_client import AsyncClient
 from .client import Client
 from .configuration import Configuration
-from .exceptions import APIError, BloomyError
+from .exceptions import APIError, AuthenticationError, BloomyError, ConfigurationError
 from .models import (
     ArchivedGoalInfo,
     CreatedGoalInfo,
@@ -47,9 +47,11 @@ __all__ = [
     "APIError",
     "ArchivedGoalInfo",
     "AsyncClient",
+    "AuthenticationError",
     "BloomyError",
     "Client",
     "Configuration",
+    "ConfigurationError",
     "CreatedGoalInfo",
     "CreatedIssue",
     "CurrentWeek",

@@ -45,7 +45,7 @@ class TestTodoOperations:
         result = todo_ops.list(meeting_id=456)
 
         assert len(result) == 1
-        mock_http_client.get.assert_called_once_with("l10/456/todos")
+        mock_http_client.get.assert_called_once_with("L10/456/todos")
 
     def test_list_both_params_error(self, mock_http_client: Mock) -> None:
         """Test error when both user_id and meeting_id are provided."""

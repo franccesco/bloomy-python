@@ -43,7 +43,8 @@ The SDK has minimal dependencies:
 
 - `httpx` - Modern HTTP client with async support
 - `pyyaml` - For configuration file handling
-- `python-dateutil` - For date parsing and manipulation
+- `typing-extensions` - For enhanced type hints
+- `pydantic` - For data validation and models
 
 All dependencies are automatically installed when you install the SDK.
 

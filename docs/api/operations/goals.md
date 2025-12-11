@@ -26,7 +26,7 @@ The async version `AsyncGoalOperations` provides the same methods as above, but 
       show_inheritance_diagram: false
 
 !!! info "Async Usage"
-    All methods have the same parameters and return types as their sync counterparts. Simply add `await` before each method call.
+    All methods have the same parameters and return types as their sync counterparts. Simply add `await` before each method call. The `create_many()` method has an additional `max_concurrent` parameter in the async version for controlling concurrency.
 
 ## Goal Status Enum
 
@@ -86,6 +86,17 @@ client.goal.update(goal_id=123, status="on")
 
         # Delete a goal (returns None)
         client.goal.delete(goal_id=new_goal.id)
+
+        # Bulk create multiple goals
+        goals_data = [
+            {"title": "Increase revenue by 20%", "meeting_id": 123},
+            {"title": "Launch new product", "meeting_id": 123, "user_id": 456},
+        ]
+        result = client.goal.create_many(goals_data)
+
+        print(f"Created {len(result.successful)} goals")
+        for error in result.failed:
+            print(f"Failed at index {error.index}: {error.error}")
     ```
 
 === "Async"
@@ -128,6 +139,9 @@ client.goal.update(goal_id=123, status="on")
             # Delete a goal (returns None)
             await client.goal.delete(goal_id=new_goal.id)
 
+            # Bulk create with concurrency control
+            result = await client.goal.create_many(goals_data, max_concurrent=10)
+
     asyncio.run(main())
     ```
 
@@ -137,6 +151,7 @@ client.goal.update(goal_id=123, status="on")
 |--------|-------------|------------|
 | `list()` | Get goals for a user | `user_id`, `archived` |
 | `create()` | Create a new goal | `title`, `meeting_id`, `user_id` |
+| `create_many()` | Create multiple goals in bulk | `goals` (sync); `goals`, `max_concurrent` (async) |
 | `update()` | Update an existing goal | `goal_id`, `title`, `accountable_user`, `status` |
 | `delete()` | Delete a goal | `goal_id` |
 | `archive()` | Archive a goal | `goal_id` |

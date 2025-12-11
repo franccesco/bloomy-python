@@ -51,7 +51,7 @@ class TodoOperations(BaseOperations):
             )
 
         if meeting_id is not None:
-            response = self._client.get(f"l10/{meeting_id}/todos")
+            response = self._client.get(f"L10/{meeting_id}/todos")
         else:
             if user_id is None:
                 user_id = self.user_id
