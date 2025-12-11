@@ -70,7 +70,7 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingImports = true
