@@ -65,7 +65,7 @@ class TodoOperations(BaseOperations):
     def create(
         self,
         title: str,
-        meeting_id: int,
+        meeting_id: int | None = None,
         due_date: str | None = None,
         user_id: int | None = None,
         notes: str | None = None,
@@ -74,7 +74,7 @@ class TodoOperations(BaseOperations):
 
         Args:
             title: The title of the new todo
-            meeting_id: The ID of the meeting associated with the todo
+            meeting_id: The ID of the meeting associated with the todo (optional)
             due_date: The due date of the todo (optional)
             user_id: The ID of the user responsible for the todo
                 (default: initialized user ID)
@@ -85,10 +85,15 @@ class TodoOperations(BaseOperations):
 
         Example:
             ```python
+            # Create a user todo
             client.todo.create(
-                title="New Todo", meeting_id=1, due_date="2024-06-15"
+                title="New Todo", due_date="2024-06-15"
             )
-            # Returns: Todo(id=1, name='New Todo', due_date='2024-06-15', ...)
+
+            # Create a meeting todo
+            client.todo.create(
+                title="Meeting Action", meeting_id=1, due_date="2024-06-15"
+            )
             ```
 
         """
@@ -98,13 +103,29 @@ class TodoOperations(BaseOperations):
         payload: dict[str, Any] = {
             "title": title,
             "accountableUserId": user_id,
-            "notes": notes,
         }
+
+        if notes is not None:
+            payload["notes"] = notes
 
         if due_date is not None:
             payload["dueDate"] = due_date
 
-        response = self._client.post(f"L10/{meeting_id}/todos", json=payload)
+        if meeting_id is not None:
+            # Meeting todo - use the correct endpoint
+            payload = {
+                "Title": title,
+                "ForId": user_id,
+            }
+            if notes is not None:
+                payload["Notes"] = notes
+            if due_date is not None:
+                payload["dueDate"] = due_date
+            response = self._client.post(f"L10/{meeting_id}/todos", json=payload)
+        else:
+            # User todo
+            response = self._client.post("todo/create", json=payload)
+
         response.raise_for_status()
         data = response.json()
 
@@ -115,7 +136,7 @@ class TodoOperations(BaseOperations):
             "DetailsUrl": data.get("DetailsUrl"),
             "DueDate": data.get("DueDate"),
             "CompleteTime": None,
-            "CreateTime": datetime.now().isoformat(),
+            "CreateTime": data.get("CreateTime", datetime.now().isoformat()),
             "OriginId": meeting_id,
             "Origin": None,
             "Complete": False,

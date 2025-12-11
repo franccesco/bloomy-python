@@ -343,26 +343,26 @@ class TestAsyncMeetingOperations:
         attendees_responses = {
             100: [
                 {
-                    "UserId": 456,
+                    "Id": 456,
                     "Name": "John Doe",
                     "ImageUrl": "https://example.com/img1.jpg",
                 }
             ],
             101: [
                 {
-                    "UserId": 456,
+                    "Id": 456,
                     "Name": "John Doe",
                     "ImageUrl": "https://example.com/img1.jpg",
                 },
                 {
-                    "UserId": 789,
+                    "Id": 789,
                     "Name": "Jane Smith",
                     "ImageUrl": "https://example.com/img2.jpg",
                 },
             ],
             102: [
                 {
-                    "UserId": 456,
+                    "Id": 456,
                     "Name": "John Doe",
                     "ImageUrl": "https://example.com/img1.jpg",
                 }
@@ -431,7 +431,7 @@ class TestAsyncMeetingOperations:
             elif "/200/attendees" in url:
                 mock_response.json.return_value = [
                     {
-                        "UserId": 456,
+                        "Id": 456,
                         "Name": "John Doe",
                         "ImageUrl": "https://example.com/img1.jpg",
                     }
@@ -522,7 +522,7 @@ class TestAsyncMeetingOperations:
                 # Return attendees for any meeting
                 mock_response.json.return_value = [
                     {
-                        "UserId": 456,
+                        "Id": 456,
                         "Name": "John Doe",
                         "ImageUrl": "https://example.com/img.jpg",
                     }

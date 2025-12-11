@@ -89,11 +89,13 @@ class AsyncMeetingOperations(AsyncBaseOperations):
 
         # Map Id to UserId for compatibility
         return [
-            MeetingAttendee.model_validate({
-                "UserId": attendee["Id"],
-                "Name": attendee["Name"],
-                "ImageUrl": attendee["ImageUrl"]
-            })
+            MeetingAttendee.model_validate(
+                {
+                    "UserId": attendee["Id"],
+                    "Name": attendee["Name"],
+                    "ImageUrl": attendee["ImageUrl"],
+                }
+            )
             for attendee in data
         ]
 
@@ -126,19 +128,21 @@ class AsyncMeetingOperations(AsyncBaseOperations):
 
         # Map meeting issue format to Issue model format
         return [
-            Issue.model_validate({
-                "Id": issue["Id"],
-                "Name": issue["Name"],
-                "DetailsUrl": issue.get("DetailsUrl"),
-                "CreateDate": issue["CreateTime"],
-                "MeetingId": issue["OriginId"],
-                "MeetingName": issue["Origin"],
-                "OwnerName": issue["Owner"]["Name"],
-                "OwnerId": issue["Owner"]["Id"],
-                "OwnerImageUrl": issue["Owner"]["ImageUrl"],
-                "ClosedDate": issue.get("CloseTime"),
-                "CompletionDate": issue.get("CompleteTime"),
-            })
+            Issue.model_validate(
+                {
+                    "Id": issue["Id"],
+                    "Name": issue["Name"],
+                    "DetailsUrl": issue.get("DetailsUrl"),
+                    "CreateDate": issue["CreateTime"],
+                    "MeetingId": issue["OriginId"],
+                    "MeetingName": issue["Origin"],
+                    "OwnerName": issue["Owner"]["Name"],
+                    "OwnerId": issue["Owner"]["Id"],
+                    "OwnerImageUrl": issue["Owner"]["ImageUrl"],
+                    "ClosedDate": issue.get("CloseTime"),
+                    "CompletionDate": issue.get("CompleteTime"),
+                }
+            )
             for issue in data
         ]
 

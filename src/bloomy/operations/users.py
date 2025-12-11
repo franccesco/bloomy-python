@@ -13,16 +13,16 @@ class UserOperations(BaseOperations, UserOperationsMixin):
     def details(
         self,
         user_id: int | None = None,
-        direct_reports: bool = False,
-        positions: bool = False,
+        include_direct_reports: bool = False,
+        include_positions: bool = False,
         all: bool = False,
     ) -> UserDetails:
         """Retrieve details of a specific user.
 
         Args:
             user_id: The ID of the user (default: the current user ID)
-            direct_reports: Whether to include direct reports (default: False)
-            positions: Whether to include positions (default: False)
+            include_direct_reports: Whether to include direct reports (default: False)
+            include_positions: Whether to include positions (default: False)
             all: Whether to include both direct reports and positions (default: False)
 
         Returns:
@@ -39,10 +39,10 @@ class UserOperations(BaseOperations, UserOperationsMixin):
         direct_reports_data = None
         positions_data = None
 
-        if direct_reports or all:
+        if include_direct_reports or all:
             direct_reports_data = self.direct_reports(user_id)
 
-        if positions or all:
+        if include_positions or all:
             positions_data = self.positions(user_id)
 
         return self._transform_user_details(data, direct_reports_data, positions_data)

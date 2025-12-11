@@ -232,11 +232,11 @@ class TestAsyncTodoOperations:
         # Verify the API call
         mock_async_client.post.assert_called_once()
         post_args = mock_async_client.post.call_args
-        assert post_args[0][0] == "todo/createmeetingtodo"
+        assert post_args[0][0] == "L10/125/todos"
         payload = post_args[1]["json"]
-        assert payload["title"] == "Meeting Action Item"
-        assert payload["meetingid"] == 125
-        assert payload["accountableUserId"] == 789
+        assert payload["Title"] == "Meeting Action Item"
+        assert payload["ForId"] == 789
+        assert payload["dueDate"] == "2024-01-20"
 
     @pytest.mark.asyncio
     async def test_complete(
