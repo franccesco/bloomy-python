@@ -93,6 +93,40 @@ class TestUserOperations:
         assert len(result.positions) == 1
         assert result.positions[0].name == "Manager"
 
+    def test_details_with_positions_null_name(
+        self, mock_http_client: Mock, sample_user_data: dict[str, Any]
+    ) -> None:
+        """Test getting user details with positions including null names."""
+        # Mock responses
+        user_response = Mock()
+        user_response.json.return_value = sample_user_data
+
+        reports_response = Mock()
+        reports_response.json.return_value = []
+
+        positions_response = Mock()
+        positions_response.json.return_value = [
+            {"Group": {"Position": {"Id": 789, "Name": "Manager"}}},
+            {"Group": {"Position": {"Id": 790, "Name": None}}},
+        ]
+
+        mock_http_client.get.side_effect = [
+            user_response,
+            reports_response,
+            positions_response,
+        ]
+
+        user_ops = UserOperations(mock_http_client)
+        result = user_ops.details(user_id=123, all=True)
+
+        assert result.direct_reports is not None
+        assert result.positions is not None
+        assert len(result.positions) == 2
+        assert result.positions[0].id == 789
+        assert result.positions[0].name == "Manager"
+        assert result.positions[1].id == 790
+        assert result.positions[1].name is None
+
     def test_direct_reports(self, mock_http_client: Mock) -> None:
         """Test getting direct reports."""
         mock_response = Mock()
@@ -136,6 +170,29 @@ class TestUserOperations:
         assert result[0].id == 101
         assert result[0].name == "Manager"
         assert result[1].name == "Team Lead"
+
+        mock_http_client.get.assert_called_once_with("users/123/seats")
+
+    def test_positions_with_null_name(self, mock_http_client: Mock) -> None:
+        """Test getting user positions when name is null."""
+        mock_response = Mock()
+        mock_response.json.return_value = [
+            {"Group": {"Position": {"Id": 101, "Name": None}}},
+            {"Group": {"Position": {"Id": 102, "Name": "Team Lead"}}},
+            {"Group": {"Position": {"Id": 103, "Name": None}}},
+        ]
+        mock_http_client.get.return_value = mock_response
+
+        user_ops = UserOperations(mock_http_client)
+        result = user_ops.positions(user_id=123)
+
+        assert len(result) == 3
+        assert result[0].id == 101
+        assert result[0].name is None
+        assert result[1].id == 102
+        assert result[1].name == "Team Lead"
+        assert result[2].id == 103
+        assert result[2].name is None
 
         mock_http_client.get.assert_called_once_with("users/123/seats")
 
