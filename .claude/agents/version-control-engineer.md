@@ -69,14 +69,65 @@ chore: bump version to 0.19.0
 git status
 
 # 2. Update version in pyproject.toml
-# Edit: version = "0.19.0"
+# Edit: version = "0.20.0"
 
-# 3. Commit version bump
-git add pyproject.toml
-git commit -m "chore: bump version to 0.19.0"
+# 3. Update CHANGELOG.md (see Changelog section below)
 
-# 4. Create git tag
-git tag -a v0.19.0 -m "Release v0.19.0"
+# 4. Commit version bump and changelog
+git add pyproject.toml CHANGELOG.md
+git commit -m "chore: bump version to 0.20.0"
+
+# 5. Create git tag
+git tag -a v0.20.0 -m "Release v0.20.0"
+```
+
+## Changelog Management
+
+### Changelog Location
+- File: `CHANGELOG.md`
+- Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+
+### Changelog Structure
+
+The changelog uses these categories under each version:
+- **Added**: New features
+- **Changed**: Changes to existing functionality
+- **Deprecated**: Features that will be removed
+- **Removed**: Features that were removed
+- **Fixed**: Bug fixes
+- **Security**: Security-related changes
+
+### Updating the Changelog
+
+**During Development:**
+1. Add changes to the `[Unreleased]` section as they are merged
+2. Use the appropriate category (Added, Changed, Fixed, etc.)
+3. Write clear, user-focused descriptions
+
+**During Release:**
+1. Rename `[Unreleased]` to `[X.Y.Z] - YYYY-MM-DD`
+2. Add a new empty `[Unreleased]` section at the top
+3. Update the comparison links at the bottom of the file
+
+**Example Changelog Entry:**
+```markdown
+## [Unreleased]
+
+### Added
+
+- New bulk delete operation for todos via `client.todo.delete_many()`
+
+### Fixed
+
+- Resolved timeout issue in async operations with large payloads
+```
+
+### Changelog Links
+
+Keep the comparison links at the bottom of CHANGELOG.md updated:
+```markdown
+[Unreleased]: https://github.com/franccesco/bloomy-python/compare/vX.Y.Z...HEAD
+[X.Y.Z]: https://github.com/franccesco/bloomy-python/compare/vA.B.C...vX.Y.Z
 ```
 
 ## Pull Request Workflow
@@ -141,36 +192,42 @@ uv run mkdocs build --strict
 
 # 3. Verify all tests pass
 # 4. Review recent commits for changelog
-git log --oneline v0.18.0..HEAD
+git log --oneline v0.19.0..HEAD
 ```
 
 ### Release Steps
 
 ```bash
-# 1. Update version in pyproject.toml
-# 2. Update CHANGELOG.md (if exists)
+# 1. Update CHANGELOG.md
+#    - Move items from [Unreleased] to new version section
+#    - Add release date: ## [0.20.0] - 2025-12-10
+#    - Update comparison links at bottom
+
+# 2. Update version in pyproject.toml
+#    version = "0.20.0"
 
 # 3. Commit release
-git add pyproject.toml
-git commit -m "chore: bump version to 0.19.0"
+git add CHANGELOG.md pyproject.toml
+git commit -m "chore: release v0.20.0"
 
-# 4. Create annotated tag
-git tag -a v0.19.0 -m "Release v0.19.0
-
-Features:
-- Added bulk operations support
-- Improved async performance
-
-Fixes:
-- Fixed date parsing issue
-"
+# 4. Create annotated tag (simple message - changelog is in CHANGELOG.md)
+git tag -a v0.20.0 -m "Release v0.20.0"
 
 # 5. Push with tags
 git push origin main --tags
 ```
 
-### Post-Release
-- Verify GitHub release is created
+### Automated GitHub Release
+
+When you push a tag matching `v*`, the GitHub Actions workflow (`.github/workflows/release.yml`) automatically:
+1. Extracts the changelog section for that version from CHANGELOG.md
+2. Creates a GitHub Release with the changelog as the release body
+3. Names the release after the tag (e.g., "v0.20.0")
+
+**No manual GitHub Release creation is needed!**
+
+### Post-Release Verification
+- Verify GitHub Release was created at: https://github.com/franccesco/bloomy-python/releases
 - Documentation auto-deploys via GitHub Actions
 - Manual PyPI publish if needed
 
@@ -219,6 +276,6 @@ git push origin --delete feature-branch
 
 ## Files to Update for Releases
 
+- `CHANGELOG.md` - Release notes (REQUIRED - move items from Unreleased, update links)
 - `pyproject.toml` - Version number
-- `CHANGELOG.md` - Release notes (if maintained)
-- `docs/` - Any version-specific documentation
+- `docs/` - Any version-specific documentation (if applicable)
