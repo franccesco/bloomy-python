@@ -32,7 +32,7 @@ class Position(BloomyBaseModel):
     """Model for position information."""
 
     id: int
-    name: str
+    name: str | None = None
 
 
 class UserDetails(BloomyBaseModel):
