@@ -156,25 +156,25 @@ class AsyncTodoOperations(AsyncBaseOperations):
 
         return Todo.model_validate(todo_data)
 
-    async def complete(self, todo_id: int) -> bool:
+    async def complete(self, todo_id: int) -> Todo:
         """Mark a todo as complete.
 
         Args:
             todo_id: The ID of the todo to complete
 
         Returns:
-            True if the operation was successful
+            A Todo model instance containing the completed todo details
 
         Example:
             ```python
             await client.todo.complete(1)
-            # Returns: True
+            # Returns: Todo(id=1, name='Todo', complete=True, ...)
             ```
 
         """
         response = await self._client.post(f"todo/{todo_id}/complete?status=true")
         response.raise_for_status()
-        return response.is_success
+        return await self.details(todo_id)
 
     async def update(
         self,
@@ -221,20 +221,8 @@ class AsyncTodoOperations(AsyncBaseOperations):
         if response.status_code != 200:
             raise RuntimeError(f"Failed to update todo. Status: {response.status_code}")
 
-        # Construct todo data for validation
-        todo_data = {
-            "Id": todo_id,
-            "Name": title or "",
-            "DetailsUrl": "",
-            "DueDate": due_date,
-            "CompleteTime": None,
-            "CreateTime": datetime.now().isoformat(),
-            "OriginId": None,
-            "Origin": None,
-            "Complete": False,
-        }
-
-        return Todo.model_validate(todo_data)
+        # Fetch the updated todo details
+        return await self.details(todo_id)
 
     async def details(self, todo_id: int) -> Todo:
         """Retrieve the details of a specific todo item by its ID.

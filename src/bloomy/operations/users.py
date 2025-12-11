@@ -15,15 +15,17 @@ class UserOperations(BaseOperations, UserOperationsMixin):
         user_id: int | None = None,
         include_direct_reports: bool = False,
         include_positions: bool = False,
-        all: bool = False,
+        include_all: bool = False,
     ) -> UserDetails:
         """Retrieve details of a specific user.
 
         Args:
             user_id: The ID of the user (default: the current user ID)
-            include_direct_reports: Whether to include direct reports (default: False)
+            include_direct_reports: Whether to include direct reports
+                (default: False)
             include_positions: Whether to include positions (default: False)
-            all: Whether to include both direct reports and positions (default: False)
+            include_all: Whether to include both direct reports and positions
+                (default: False)
 
         Returns:
             A UserDetails model containing user details
@@ -39,10 +41,10 @@ class UserOperations(BaseOperations, UserOperationsMixin):
         direct_reports_data = None
         positions_data = None
 
-        if include_direct_reports or all:
+        if include_direct_reports or include_all:
             direct_reports_data = self.direct_reports(user_id)
 
-        if include_positions or all:
+        if include_positions or include_all:
             positions_data = self.positions(user_id)
 
         return self._transform_user_details(data, direct_reports_data, positions_data)
@@ -101,7 +103,7 @@ class UserOperations(BaseOperations, UserOperationsMixin):
 
         return self._transform_search_results(data)
 
-    def all(self, include_placeholders: bool = False) -> list[UserListItem]:
+    def list(self, include_placeholders: bool = False) -> list[UserListItem]:
         """Retrieve all users in the system.
 
         Args:

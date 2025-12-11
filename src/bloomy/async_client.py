@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from .configuration import Configuration
+from .exceptions import ConfigurationError
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -62,22 +63,34 @@ class AsyncClient:
         self,
         api_key: str | None = None,
         base_url: str = "https://app.bloomgrowth.com/api/v1",
+        timeout: float = 30.0,
     ) -> None:
         """Initialize the async Bloomy client.
 
         Args:
             api_key: The API key for authentication.
             base_url: The base URL for the API.
+            timeout: The timeout in seconds for HTTP requests. Defaults to 30.0.
+
+        Raises:
+            ConfigurationError: If no API key is provided or found in configuration.
 
         """
         config = Configuration(api_key=api_key)
+
+        if not config.api_key:
+            raise ConfigurationError(
+                "No API key provided. Set it explicitly, via BG_API_KEY "
+                "environment variable, or in ~/.bloomy/config.yaml configuration file."
+            )
+
         self._client = httpx.AsyncClient(
             base_url=base_url,
             headers={
                 "Authorization": f"Bearer {config.api_key}",
                 "Content-Type": "application/json",
             },
-            timeout=30.0,
+            timeout=timeout,
         )
 
         # Lazy imports to avoid circular dependencies

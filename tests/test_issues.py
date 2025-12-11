@@ -87,15 +87,24 @@ class TestIssueOperations:
 
         assert "Please provide either" in str(exc_info.value)
 
-    def test_solve(self, mock_http_client: Mock) -> None:
-        """Test solving an issue."""
-        mock_response = Mock()
-        mock_http_client.post.return_value = mock_response
+    def test_complete(
+        self, mock_http_client: Mock, sample_issue_data: dict[str, Any]
+    ) -> None:
+        """Test completing an issue."""
+        # Mock the complete POST response
+        post_response = Mock()
+        mock_http_client.post.return_value = post_response
+
+        # Mock the details GET response
+        get_response = Mock()
+        get_response.json.return_value = sample_issue_data
+        mock_http_client.get.return_value = get_response
 
         issue_ops = IssueOperations(mock_http_client)
-        result = issue_ops.solve(issue_id=401)
+        result = issue_ops.complete(issue_id=401)
 
-        assert result is True
+        assert isinstance(result, type(issue_ops.details(401)))
+        assert result.id == 401
         mock_http_client.post.assert_called_once_with(
             "issues/401/complete", json={"complete": True}
         )
@@ -159,3 +168,76 @@ class TestIssueOperations:
             "issues/create",
             json={"title": "New Issue", "ownerid": 123, "meetingid": 456},
         )
+
+    def test_update(
+        self, mock_http_client: Mock, sample_issue_data: dict[str, Any]
+    ) -> None:
+        """Test updating an issue."""
+        # Mock the update PUT response
+        put_response = Mock()
+        mock_http_client.put.return_value = put_response
+
+        # Mock the details GET response
+        get_response = Mock()
+        updated_data = sample_issue_data.copy()
+        updated_data["Name"] = "Updated Title"
+        get_response.json.return_value = updated_data
+        mock_http_client.get.return_value = get_response
+
+        issue_ops = IssueOperations(mock_http_client)
+        result = issue_ops.update(issue_id=401, title="Updated Title")
+
+        assert result.id == 401
+        assert result.title == "Updated Title"
+        mock_http_client.put.assert_called_once_with(
+            "issues/401", json={"title": "Updated Title"}
+        )
+
+    def test_update_with_notes(
+        self, mock_http_client: Mock, sample_issue_data: dict[str, Any]
+    ) -> None:
+        """Test updating an issue with notes."""
+        put_response = Mock()
+        mock_http_client.put.return_value = put_response
+
+        get_response = Mock()
+        get_response.json.return_value = sample_issue_data
+        mock_http_client.get.return_value = get_response
+
+        issue_ops = IssueOperations(mock_http_client)
+        result = issue_ops.update(issue_id=401, notes="Updated notes")
+
+        assert result.id == 401
+        mock_http_client.put.assert_called_once_with(
+            "issues/401", json={"notes": "Updated notes"}
+        )
+
+    def test_update_both_fields(
+        self, mock_http_client: Mock, sample_issue_data: dict[str, Any]
+    ) -> None:
+        """Test updating an issue with both title and notes."""
+        put_response = Mock()
+        mock_http_client.put.return_value = put_response
+
+        get_response = Mock()
+        get_response.json.return_value = sample_issue_data
+        mock_http_client.get.return_value = get_response
+
+        issue_ops = IssueOperations(mock_http_client)
+        result = issue_ops.update(
+            issue_id=401, title="Updated Title", notes="Updated notes"
+        )
+
+        assert result.id == 401
+        mock_http_client.put.assert_called_once_with(
+            "issues/401", json={"title": "Updated Title", "notes": "Updated notes"}
+        )
+
+    def test_update_no_fields(self, mock_http_client: Mock) -> None:
+        """Test updating an issue with no fields raises ValueError."""
+        issue_ops = IssueOperations(mock_http_client)
+
+        with pytest.raises(ValueError) as exc_info:
+            issue_ops.update(issue_id=401)
+
+        assert "At least one field" in str(exc_info.value)

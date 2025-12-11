@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from .configuration import Configuration
+from .exceptions import ConfigurationError
 from .operations.goals import GoalOperations
 from .operations.headlines import HeadlineOperations
 from .operations.issues import IssueOperations
@@ -38,15 +39,22 @@ class Client:
 
     """
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str = "https://app.bloomgrowth.com/api/v1",
+        timeout: float = 30.0,
+    ) -> None:
         """Initialize a new Client instance.
 
         Args:
             api_key: The API key to use. If not provided, will attempt to
                      load from environment variable (BG_API_KEY) or configuration file.
+            base_url: The base URL for the API. Defaults to the production API URL.
+            timeout: The timeout in seconds for HTTP requests. Defaults to 30.0.
 
         Raises:
-            ValueError: If no API key is provided or found in configuration.
+            ConfigurationError: If no API key is provided or found in configuration.
 
         """
         # Use Configuration class which handles priority:
@@ -56,23 +64,23 @@ class Client:
         self.configuration = Configuration(api_key)
 
         if not self.configuration.api_key:
-            raise ValueError(
+            raise ConfigurationError(
                 "No API key provided. Set it explicitly, via BG_API_KEY "
                 "environment variable, or in ~/.bloomy/config.yaml configuration file."
             )
 
         self._api_key = self.configuration.api_key
-        self._base_url = "https://app.bloomgrowth.com/api/v1"
+        self._base_url = base_url
 
         # Initialize HTTP client
         self._client = httpx.Client(
-            base_url=self._base_url,
+            base_url=base_url,
             headers={
                 "Accept": "*/*",
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self._api_key}",
             },
-            timeout=30.0,
+            timeout=timeout,
         )
 
         # Initialize operation classes

@@ -20,7 +20,7 @@ For automatic resource cleanup:
 ```python
 with Client(api_key="your-api-key") as client:
     # Use client here
-    users = client.user.all()
+    users = client.user.list()
 # Connection automatically closed
 ```
 
@@ -117,6 +117,26 @@ def retry_operation(func, max_retries=3, delay=1):
 
 # Usage
 user = retry_operation(lambda: client.user.details())
+```
+
+### Custom Configuration
+
+Configure the client with custom settings:
+
+```python
+from bloomy import Client
+
+# Custom base URL for testing/staging
+client = Client(
+    api_key="your-api-key",
+    base_url="https://staging.example.com/api/v1"
+)
+
+# Custom timeout for slow networks
+client = Client(
+    api_key="your-api-key",
+    timeout=60.0  # 60 seconds
+)
 ```
 
 ### Custom Headers

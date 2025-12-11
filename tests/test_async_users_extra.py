@@ -162,7 +162,7 @@ class TestAsyncUserOperationsExtra:
         assert result.direct_reports[0].name == "Jane Smith"
 
     @pytest.mark.asyncio
-    async def test_all_users(
+    async def test_list_users(
         self,
         async_client: AsyncClient,
         mock_async_client: AsyncMock,
@@ -197,7 +197,7 @@ class TestAsyncUserOperationsExtra:
         mock_async_client.get.return_value = mock_response
 
         # Call the method
-        result = await async_client.user.all()
+        result = await async_client.user.list()
 
         # Verify the result
         assert len(result) == 2

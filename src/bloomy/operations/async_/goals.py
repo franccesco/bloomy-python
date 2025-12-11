@@ -13,6 +13,7 @@ from ...models import (
     CreatedGoalInfo,
     GoalInfo,
     GoalListResponse,
+    GoalStatus,
 )
 from ...utils.async_base_operations import AsyncBaseOperations
 
@@ -120,27 +121,23 @@ class AsyncGoalOperations(AsyncBaseOperations):
             created_at=data["CreateTime"],
         )
 
-    async def delete(self, goal_id: int) -> bool:
+    async def delete(self, goal_id: int) -> None:
         """Delete a goal.
 
         Args:
             goal_id: The ID of the goal to delete
 
-        Returns:
-            True if deletion was successful
-
         """
         response = await self._client.delete(f"rocks/{goal_id}")
         response.raise_for_status()
-        return True
 
     async def update(
         self,
         goal_id: int,
         title: str | None = None,
         accountable_user: int | None = None,
-        status: str | None = None,
-    ) -> bool:
+        status: GoalStatus | str | None = None,
+    ) -> None:
         """Update a goal.
 
         Args:
@@ -148,10 +145,9 @@ class AsyncGoalOperations(AsyncBaseOperations):
             title: The new title of the goal
             accountable_user: The ID of the user responsible for the goal
                 (default: initialized user ID)
-            status: The status value ('on', 'off', or 'complete')
-
-        Returns:
-            True if the update was successful
+            status: The status value. Can be a GoalStatus enum member or string
+                ('on', 'off', or 'complete'). Use GoalStatus.ON_TRACK,
+                GoalStatus.AT_RISK, or GoalStatus.COMPLETE for type safety.
 
         Raises:
             ValueError: If an invalid status value is provided
@@ -167,7 +163,9 @@ class AsyncGoalOperations(AsyncBaseOperations):
 
         if status is not None:
             valid_status = {"on": "OnTrack", "off": "AtRisk", "complete": "Complete"}
-            status_key = status.lower()
+            # Handle both GoalStatus enum and string
+            status_value = status.value if isinstance(status, GoalStatus) else status
+            status_key = status_value.lower()
             if status_key not in valid_status:
                 raise ValueError(
                     "Invalid status value. Must be 'on', 'off', or 'complete'."
@@ -176,35 +174,26 @@ class AsyncGoalOperations(AsyncBaseOperations):
 
         response = await self._client.put(f"rocks/{goal_id}", json=payload)
         response.raise_for_status()
-        return True
 
-    async def archive(self, goal_id: int) -> bool:
+    async def archive(self, goal_id: int) -> None:
         """Archive a rock with the specified goal ID.
 
         Args:
             goal_id: The ID of the goal/rock to archive
 
-        Returns:
-            True if the archival was successful
-
         """
         response = await self._client.put(f"rocks/{goal_id}/archive")
         response.raise_for_status()
-        return True
 
-    async def restore(self, goal_id: int) -> bool:
+    async def restore(self, goal_id: int) -> None:
         """Restore a previously archived goal identified by the provided goal ID.
 
         Args:
             goal_id: The unique identifier of the goal to restore
 
-        Returns:
-            True if the restore operation was successful
-
         """
         response = await self._client.put(f"rocks/{goal_id}/restore")
         response.raise_for_status()
-        return True
 
     async def _get_archived_goals(
         self, user_id: int | None = None

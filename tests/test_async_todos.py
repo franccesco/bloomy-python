@@ -243,33 +243,66 @@ class TestAsyncTodoOperations:
         self, async_client: AsyncClient, mock_async_client: AsyncMock
     ) -> None:
         """Test completing a todo."""
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.is_success = True
+        # Mock complete response
+        mock_complete_response = MagicMock()
+        mock_complete_response.raise_for_status = MagicMock()
+        mock_complete_response.is_success = True
 
-        mock_async_client.post.return_value = mock_response
+        # Mock details response
+        mock_details_response = MagicMock()
+        mock_details_response.json.return_value = {
+            "Id": 1,
+            "Name": "Completed Task",
+            "DetailsUrl": "https://example.com/todo/1",
+            "DueDate": "2024-12-31",
+            "CreateTime": "2024-01-01T10:00:00Z",
+            "CompleteTime": "2024-12-10T10:00:00Z",
+            "Complete": True,
+        }
+        mock_details_response.is_success = True
+        mock_details_response.raise_for_status = MagicMock()
+
+        mock_async_client.post.return_value = mock_complete_response
+        mock_async_client.get.return_value = mock_details_response
 
         # Call the method
         result = await async_client.todo.complete(todo_id=1)
 
         # Verify the result
-        assert result is True
+        assert isinstance(result, Todo)
+        assert result.id == 1
+        assert result.complete is True
 
-        # Verify the API call
+        # Verify the API calls
         mock_async_client.post.assert_called_once_with("todo/1/complete?status=true")
+        mock_async_client.get.assert_called_once_with("todo/1")
 
     @pytest.mark.asyncio
     async def test_update(
         self, async_client: AsyncClient, mock_async_client: AsyncMock
     ) -> None:
         """Test updating a todo."""
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        # Mock update response
+        mock_update_response = MagicMock()
+        mock_update_response.raise_for_status = MagicMock()
+        mock_update_response.status_code = 200
 
-        mock_async_client.post.return_value = mock_response
+        # Mock details response
+        mock_details_response = MagicMock()
+        mock_details_response.json.return_value = {
+            "Id": 1,
+            "Name": "Updated Task",
+            "DetailsUrl": "https://example.com/todo/1",
+            "DueDate": "2024-12-01",
+            "CreateTime": "2024-01-01T10:00:00Z",
+            "CompleteTime": None,
+            "Complete": False,
+        }
+        mock_details_response.is_success = True
+        mock_details_response.raise_for_status = MagicMock()
 
-        mock_response.status_code = 200
-        mock_async_client.put.return_value = mock_response
+        mock_async_client.put.return_value = mock_update_response
+        mock_async_client.get.return_value = mock_details_response
 
         # Call the method
         result = await async_client.todo.update(
@@ -283,13 +316,14 @@ class TestAsyncTodoOperations:
         assert result.id == 1
         assert result.name == "Updated Task"
 
-        # Verify the API call
+        # Verify the API calls
         mock_async_client.put.assert_called_once()
         put_args = mock_async_client.put.call_args
         assert put_args[0][0] == "todo/1"
         payload = put_args[1]["json"]
         assert payload["title"] == "Updated Task"
         assert payload["dueDate"] == "2024-12-01"
+        mock_async_client.get.assert_called_once_with("todo/1")
 
     @pytest.mark.asyncio
     async def test_create_many_all_successful(

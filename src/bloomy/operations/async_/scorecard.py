@@ -106,6 +106,35 @@ class AsyncScorecardOperations(AsyncBaseOperations):
 
         return scorecards
 
+    async def get(
+        self,
+        measurable_id: int,
+        user_id: int | None = None,
+        week_offset: int = 0,
+    ) -> ScorecardItem | None:
+        """Get a single scorecard item by measurable ID.
+
+        Args:
+            measurable_id: The ID of the measurable item
+            user_id: The user ID (defaults to current user)
+            week_offset: Week offset from current week (default: 0)
+
+        Returns:
+            ScorecardItem if found, None otherwise
+
+        Example:
+            ```python
+            item = await client.scorecard.get(measurable_id=123)
+            if item:
+                print(f"{item.title}: {item.value}/{item.target}")
+            ```
+
+        """
+        scorecards = await self.list(
+            user_id=user_id, show_empty=True, week_offset=week_offset
+        )
+        return next((s for s in scorecards if s.measurable_id == measurable_id), None)
+
     async def score(
         self, measurable_id: int, score: float, week_offset: int = 0
     ) -> bool:

@@ -12,6 +12,7 @@ from ..models import (
     CreatedGoalInfo,
     GoalInfo,
     GoalListResponse,
+    GoalStatus,
 )
 from ..utils.base_operations import BaseOperations
 
@@ -136,33 +137,28 @@ class GoalOperations(BaseOperations):
             created_at=data["CreateTime"],
         )
 
-    def delete(self, goal_id: int) -> bool:
+    def delete(self, goal_id: int) -> None:
         """Delete a goal.
 
         Args:
             goal_id: The ID of the goal to delete
 
-        Returns:
-            True if deletion was successful
-
         Example:
             ```python
             client.goal.delete(1)
-            # Returns: True
             ```
 
         """
         response = self._client.delete(f"rocks/{goal_id}")
         response.raise_for_status()
-        return True
 
     def update(
         self,
         goal_id: int,
         title: str | None = None,
         accountable_user: int | None = None,
-        status: str | None = None,
-    ) -> bool:
+        status: GoalStatus | str | None = None,
+    ) -> None:
         """Update a goal.
 
         Args:
@@ -170,18 +166,22 @@ class GoalOperations(BaseOperations):
             title: The new title of the goal
             accountable_user: The ID of the user responsible for the goal
                 (default: initialized user ID)
-            status: The status value ('on', 'off', or 'complete')
-
-        Returns:
-            True if the update was successful
+            status: The status value. Can be a GoalStatus enum member or string
+                ('on', 'off', or 'complete'). Use GoalStatus.ON_TRACK,
+                GoalStatus.AT_RISK, or GoalStatus.COMPLETE for type safety.
 
         Raises:
             ValueError: If an invalid status value is provided
 
         Example:
             ```python
-            client.goal.update(goal_id=1, title="Updated Goal", status='on')
-            # Returns: True
+            from bloomy import GoalStatus
+
+            # Using enum (recommended)
+            client.goal.update(goal_id=1, status=GoalStatus.ON_TRACK)
+
+            # Using string
+            client.goal.update(goal_id=1, status='on')
             ```
 
         """
@@ -195,7 +195,9 @@ class GoalOperations(BaseOperations):
 
         if status is not None:
             valid_status = {"on": "OnTrack", "off": "AtRisk", "complete": "Complete"}
-            status_key = status.lower()
+            # Handle both GoalStatus enum and string
+            status_value = status.value if isinstance(status, GoalStatus) else status
+            status_key = status_value.lower()
             if status_key not in valid_status:
                 raise ValueError(
                     "Invalid status value. Must be 'on', 'off', or 'complete'."
@@ -204,47 +206,36 @@ class GoalOperations(BaseOperations):
 
         response = self._client.put(f"rocks/{goal_id}", json=payload)
         response.raise_for_status()
-        return True
 
-    def archive(self, goal_id: int) -> bool:
+    def archive(self, goal_id: int) -> None:
         """Archive a rock with the specified goal ID.
 
         Args:
             goal_id: The ID of the goal/rock to archive
 
-        Returns:
-            True if the archival was successful, False otherwise
-
         Example:
             ```python
-            goals.archive(123)
-            # Returns: True
+            client.goal.archive(123)
             ```
 
         """
         response = self._client.put(f"rocks/{goal_id}/archive")
         response.raise_for_status()
-        return True
 
-    def restore(self, goal_id: int) -> bool:
+    def restore(self, goal_id: int) -> None:
         """Restore a previously archived goal identified by the provided goal ID.
 
         Args:
             goal_id: The unique identifier of the goal to restore
 
-        Returns:
-            True if the restore operation was successful, False otherwise
-
         Example:
             ```python
-            goals.restore(123)
-            # Returns: True
+            client.goal.restore(123)
             ```
 
         """
         response = self._client.put(f"rocks/{goal_id}/restore")
         response.raise_for_status()
-        return True
 
     def _get_archived_goals(self, user_id: int | None = None) -> list[ArchivedGoalInfo]:
         """Retrieve all archived goals for a specific user (private method).

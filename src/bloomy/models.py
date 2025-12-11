@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class GoalStatus(StrEnum):
+    """Valid goal status values."""
+
+    ON_TRACK = "on"
+    AT_RISK = "off"
+    COMPLETE = "complete"
 
 
 class BloomyBaseModel(BaseModel):

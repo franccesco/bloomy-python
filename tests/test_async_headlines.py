@@ -94,7 +94,7 @@ class TestAsyncHeadlineOperations:
             headline_id=501, title="Updated headline"
         )
 
-        assert result is True
+        assert result is None
         mock_async_client.put.assert_called_once_with(
             "headline/501", json={"title": "Updated headline"}
         )
@@ -229,5 +229,5 @@ class TestAsyncHeadlineOperations:
 
         result = await async_client.headline.delete(501)
 
-        assert result is True
+        assert result is None
         mock_async_client.delete.assert_called_once_with("headline/501")

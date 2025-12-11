@@ -182,7 +182,7 @@ class TestAsyncGoalOperations:
 
         result = await async_client.goal.delete(123)
 
-        assert result is True
+        assert result is None
         mock_async_client.delete.assert_called_once_with("rocks/123")
 
     @pytest.mark.asyncio
@@ -198,7 +198,7 @@ class TestAsyncGoalOperations:
             goal_id=123, title="Updated Goal", status="on"
         )
 
-        assert result is True
+        assert result is None
         mock_async_client.put.assert_called_once_with(
             "rocks/123",
             json={
@@ -227,7 +227,7 @@ class TestAsyncGoalOperations:
 
         result = await async_client.goal.archive(123)
 
-        assert result is True
+        assert result is None
         mock_async_client.put.assert_called_once_with("rocks/123/archive")
 
     @pytest.mark.asyncio
@@ -241,7 +241,7 @@ class TestAsyncGoalOperations:
 
         result = await async_client.goal.restore(123)
 
-        assert result is True
+        assert result is None
         mock_async_client.put.assert_called_once_with("rocks/123/restore")
 
     @pytest.mark.asyncio

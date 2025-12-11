@@ -55,21 +55,17 @@ class HeadlineOperations(BaseOperations):
             notes_url=data.get("DetailsUrl", ""),
         )
 
-    def update(self, headline_id: int, title: str) -> bool:
+    def update(self, headline_id: int, title: str) -> None:
         """Update a headline.
 
         Args:
             headline_id: The ID of the headline to update
             title: The new title of the headline
 
-        Returns:
-            True if update was successful
-
         """
         payload = {"title": title}
         response = self._client.put(f"headline/{headline_id}", json=payload)
         response.raise_for_status()
-        return True
 
     def details(self, headline_id: int) -> HeadlineDetails:
         """Get headline details.
@@ -176,16 +172,12 @@ class HeadlineOperations(BaseOperations):
             for headline in data
         ]
 
-    def delete(self, headline_id: int) -> bool:
+    def delete(self, headline_id: int) -> None:
         """Delete a headline.
 
         Args:
             headline_id: The ID of the headline to delete
 
-        Returns:
-            True if the deletion was successful
-
         """
         response = self._client.delete(f"headline/{headline_id}")
         response.raise_for_status()
-        return True

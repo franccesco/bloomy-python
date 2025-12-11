@@ -28,41 +28,63 @@ The async version `AsyncGoalOperations` provides the same methods as above, but 
 !!! info "Async Usage"
     All methods have the same parameters and return types as their sync counterparts. Simply add `await` before each method call.
 
+## Goal Status Enum
+
+The SDK provides a `GoalStatus` enum for type-safe status updates:
+
+```python
+from bloomy import GoalStatus
+
+# Enum values (recommended)
+GoalStatus.ON_TRACK     # "on" - Goal is on track
+GoalStatus.AT_RISK      # "off" - Goal is at risk
+GoalStatus.COMPLETE     # "complete" - Goal is complete
+
+# You can still use strings directly
+client.goal.update(goal_id=123, status="on")
+```
+
+!!! tip "Using the Enum"
+    Using `GoalStatus` enum values is recommended for better type checking and IDE autocomplete support.
+
 ## Usage Examples
 
 === "Sync"
 
     ```python
-    from bloomy import Client
-    
+    from bloomy import Client, GoalStatus
+
     with Client(api_key="your-api-key") as client:
         # List active goals
         goals = client.goal.list()
         for goal in goals:
             print(f"{goal.title} - Status: {goal.status}")
-        
+
         # List with archived goals included
         all_goals = client.goal.list(archived=True)
         print(f"Active: {len(all_goals.active)}")
         print(f"Archived: {len(all_goals.archived)}")
-        
+
         # Create a new goal
         new_goal = client.goal.create(
             title="Increase customer retention by 20%",
             meeting_id=123
         )
-        
-        # Update goal status
+
+        # Update goal status using enum (recommended)
         client.goal.update(
             goal_id=new_goal.id,
-            status="on"  # on track
+            status=GoalStatus.ON_TRACK
         )
-        
-        # Archive and restore
+
+        # Or use string directly
+        client.goal.update(goal_id=new_goal.id, status="off")  # at risk
+
+        # Archive and restore (both return None)
         client.goal.archive(goal_id=new_goal.id)
         client.goal.restore(goal_id=new_goal.id)
-        
-        # Delete a goal
+
+        # Delete a goal (returns None)
         client.goal.delete(goal_id=new_goal.id)
     ```
 
@@ -70,39 +92,42 @@ The async version `AsyncGoalOperations` provides the same methods as above, but 
 
     ```python
     import asyncio
-    from bloomy import AsyncClient
-    
+    from bloomy import AsyncClient, GoalStatus
+
     async def main():
         async with AsyncClient(api_key="your-api-key") as client:
             # List active goals
             goals = await client.goal.list()
             for goal in goals:
                 print(f"{goal.title} - Status: {goal.status}")
-            
+
             # List with archived goals included
             all_goals = await client.goal.list(archived=True)
             print(f"Active: {len(all_goals.active)}")
             print(f"Archived: {len(all_goals.archived)}")
-            
+
             # Create a new goal
             new_goal = await client.goal.create(
                 title="Increase customer retention by 20%",
                 meeting_id=123
             )
-            
-            # Update goal status
+
+            # Update goal status using enum (recommended)
             await client.goal.update(
                 goal_id=new_goal.id,
-                status="on"  # on track
+                status=GoalStatus.ON_TRACK
             )
-            
-            # Archive and restore
+
+            # Or use string directly
+            await client.goal.update(goal_id=new_goal.id, status="off")  # at risk
+
+            # Archive and restore (both return None)
             await client.goal.archive(goal_id=new_goal.id)
             await client.goal.restore(goal_id=new_goal.id)
-            
-            # Delete a goal
+
+            # Delete a goal (returns None)
             await client.goal.delete(goal_id=new_goal.id)
-    
+
     asyncio.run(main())
     ```
 
@@ -118,4 +143,7 @@ The async version `AsyncGoalOperations` provides the same methods as above, but 
 | `restore()` | Restore an archived goal | `goal_id` |
 
 !!! info "Status Values"
-    Valid status values are: `'on'` (On Track), `'off'` (At Risk), or `'complete'` (Completed)
+    Valid status values are: `'on'` (On Track), `'off'` (At Risk), or `'complete'` (Completed). Use the `GoalStatus` enum for type-safe updates.
+
+!!! note "Return Values"
+    The `update()`, `delete()`, `archive()`, and `restore()` methods return `None` instead of boolean values.

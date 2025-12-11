@@ -54,9 +54,17 @@ The async version `AsyncIssueOperations` provides the same methods as above, but
         
         # List issues for a specific meeting
         meeting_issues = client.issue.list(meeting_id=123)
-        
-        # Solve an issue (mark as completed)
-        client.issue.solve(issue_id=issue.id)
+
+        # Update an issue
+        updated = client.issue.update(
+            issue_id=issue.id,
+            title="Updated: Server performance degradation",
+            notes="Added monitoring and identified bottleneck"
+        )
+
+        # Complete an issue (mark as solved)
+        completed = client.issue.complete(issue_id=issue.id)
+        print(f"Completed: {completed.title}")
     ```
 
 === "Async"
@@ -85,21 +93,81 @@ The async version `AsyncIssueOperations` provides the same methods as above, but
             
             # List issues for a specific meeting
             meeting_issues = await client.issue.list(meeting_id=123)
-            
-            # Solve an issue (mark as completed)
-            await client.issue.solve(issue_id=issue.id)
+
+            # Update an issue
+            updated = await client.issue.update(
+                issue_id=issue.id,
+                title="Updated: Server performance degradation",
+                notes="Added monitoring and identified bottleneck"
+            )
+
+            # Complete an issue (mark as solved)
+            completed = await client.issue.complete(issue_id=issue.id)
+            print(f"Completed: {completed.title}")
     
     asyncio.run(main())
     ```
 
 ## Available Methods
 
-| Method | Description | Parameters |
-|--------|-------------|------------|
-| `details()` | Get detailed issue information | `issue_id` |
-| `list()` | Get issues | `user_id`, `meeting_id` |
-| `create()` | Create a new issue | `meeting_id`, `title`, `user_id`, `notes` |
-| `solve()` | Mark an issue as solved | `issue_id` |
+| Method | Description | Parameters | Returns |
+|--------|-------------|------------|---------|
+| `details()` | Get detailed issue information | `issue_id` | `IssueDetails` |
+| `list()` | Get issues | `user_id`, `meeting_id` | `list[IssueDetails]` |
+| `create()` | Create a new issue | `meeting_id`, `title`, `user_id`, `notes` | `IssueDetails` |
+| `update()` | Update an existing issue | `issue_id`, `title`, `notes` | `IssueDetails` |
+| `complete()` | Mark an issue as solved | `issue_id` | `IssueDetails` |
 
-!!! tip "Issue Resolution"
-    Issues can only be marked as solved, not deleted. Use the `solve()` method to close an issue.
+!!! tip "Issue Management"
+    - Issues can only be marked as solved, not deleted. Use the `complete()` method to close an issue.
+    - The `complete()` method returns the updated issue details, allowing you to verify the completion.
+    - Use `update()` to modify issue title or notes before completing.
+
+## Update Examples
+
+=== "Sync"
+
+    ```python
+    from bloomy import Client
+
+    with Client(api_key="your-api-key") as client:
+        # Update issue title only
+        updated = client.issue.update(123, title="New Title")
+
+        # Update issue notes only
+        updated = client.issue.update(123, notes="Additional context and details")
+
+        # Update both title and notes
+        updated = client.issue.update(
+            issue_id=123,
+            title="Critical: Database Connection Pool Exhausted",
+            notes="Increased max connections from 100 to 200"
+        )
+    ```
+
+=== "Async"
+
+    ```python
+    import asyncio
+    from bloomy import AsyncClient
+
+    async def main():
+        async with AsyncClient(api_key="your-api-key") as client:
+            # Update issue title only
+            updated = await client.issue.update(123, title="New Title")
+
+            # Update issue notes only
+            updated = await client.issue.update(123, notes="Additional context and details")
+
+            # Update both title and notes
+            updated = await client.issue.update(
+                issue_id=123,
+                title="Critical: Database Connection Pool Exhausted",
+                notes="Increased max connections from 100 to 200"
+            )
+
+    asyncio.run(main())
+    ```
+
+!!! note "Update Requirements"
+    At least one of `title` or `notes` must be provided when calling `update()`. If neither is provided, a `ValueError` will be raised.
