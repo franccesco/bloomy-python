@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2025-12-10
+
+### Fixed
+
+- Fix `CompletionDate` field mapping in `MeetingOperations` to use `CompleteTime` instead of `CloseTime` (sync/async consistency)
+- Fix `Configuration.configure_api_key()` documentation to use correct instance method pattern
+- Add missing `AuthenticationError` documentation with usage examples
+- Update dependencies list in documentation (add pydantic, typing-extensions)
+- Fix code examples to use correct model field names (`complete_date`)
+- Add bulk operations documentation for todos, issues, goals, and meetings
+- Clarify default user ID behavior in user operations documentation
+- Update method signatures and return types in API reference
+- Fix async concurrency control documentation (`max_concurrent` parameter)
+- Improve error handling examples throughout guides
+
 ## [0.20.0] - 2025-12-10
 
 ### Added
@@ -216,7 +231,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration management with multiple API key sources
 - httpx-based HTTP client with bearer token authentication
 
-[Unreleased]: https://github.com/franccesco/bloomy-python/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/franccesco/bloomy-python/compare/v0.20.1...HEAD
+[0.20.1]: https://github.com/franccesco/bloomy-python/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/franccesco/bloomy-python/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/franccesco/bloomy-python/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/franccesco/bloomy-python/compare/v0.17.0...v0.18.0

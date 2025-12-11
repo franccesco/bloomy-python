@@ -1,6 +1,6 @@
 [project]
 name = "bloomy-python"
-version = "0.20.0"
+version = "0.20.1"
 description = "Python SDK for Bloom Growth API"
 readme = "README.md"
 authors = [{ name = "Franccesco Orozco", email = "franccesco@codingdose.info" }]
