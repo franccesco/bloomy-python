@@ -28,6 +28,9 @@ The async version `AsyncUserOperations` provides the same methods as above, but 
 !!! info "Async Usage"
     All methods in `AsyncUserOperations` have the same parameters and return types as their sync counterparts. Simply add `await` before each method call and use within an async context.
 
+!!! tip "Default User ID Behavior"
+    When `user_id` is not provided to `details()`, `direct_reports()`, or `positions()`, these methods automatically default to the authenticated user. This makes it easy to get information about the current user without looking up their ID first.
+
 ## Usage Examples
 
 === "Sync"
@@ -48,13 +51,11 @@ The async version `AsyncUserOperations` provides the same methods as above, but 
         # Get all users
         all_users = client.user.list()
 
-        # Get user with direct reports and positions
-        user_full = client.user.details(
-            user_id=123,
-            include_direct_reports=True,
-            include_positions=True,
-            include_all=True
-        )
+        # Get user with all details using include_all
+        user_full = client.user.details(user_id=123, include_all=True)
+
+        # Or selectively include only what you need
+        user_with_reports = client.user.details(user_id=123, include_direct_reports=True)
     ```
 
 === "Async"
@@ -77,13 +78,11 @@ The async version `AsyncUserOperations` provides the same methods as above, but 
             # Get all users
             all_users = await client.user.list()
 
-            # Get user with direct reports and positions
-            user_full = await client.user.details(
-                user_id=123,
-                include_direct_reports=True,
-                include_positions=True,
-                include_all=True
-            )
+            # Get user with all details using include_all
+            user_full = await client.user.details(user_id=123, include_all=True)
+
+            # Or selectively include only what you need
+            user_with_reports = await client.user.details(user_id=123, include_direct_reports=True)
     
     asyncio.run(main())
     ```

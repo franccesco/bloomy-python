@@ -90,17 +90,23 @@ print(f"Has API key: {config.api_key is not None}")
 ### Update Configuration
 
 ```python
+from bloomy import Configuration
+
 # Update with new credentials
+config = Configuration()
 config.configure_api_key(
     username="new-email@example.com",
     password="new-password",
     store_key=True
 )
-
-# Or set API key directly and store it
-config = Configuration(api_key="new-api-key")
-config._store_api_key()  # Store to config file
 ```
+
+!!! note "Using API Key Directly"
+    If you want to use an API key directly without storing it, pass it to the client:
+    ```python
+    from bloomy import Client
+    client = Client(api_key="your-api-key")
+    ```
 
 ### Clear Configuration
 
