@@ -47,33 +47,37 @@ class TestAsyncMeetingOperationsExtra:
         self, async_client: AsyncClient, mock_async_client: AsyncMock
     ) -> None:
         """Test fetching meeting issues."""
-        # Mock the response data
+        # Mock the response data (in API format)
         issues_data = [
             {
                 "Id": 1,
                 "Name": "Issue 1",
                 "DetailsUrl": "https://example.com/issue/1",
-                "CreateDate": "2024-01-01T10:00:00Z",
-                "MeetingId": 123,
-                "MeetingName": "Weekly Meeting",
-                "OwnerName": "John Doe",
-                "OwnerId": 456,
-                "OwnerImageUrl": "https://example.com/john.jpg",
-                "ClosedDate": None,
-                "CompletionDate": None,
+                "CreateTime": "2024-01-01T10:00:00Z",
+                "OriginId": 123,
+                "Origin": "Weekly Meeting",
+                "Owner": {
+                    "Id": 456,
+                    "Name": "John Doe",
+                    "ImageUrl": "https://example.com/john.jpg",
+                },
+                "CloseTime": None,
+                "CompleteTime": None,
             },
             {
                 "Id": 2,
                 "Name": "Issue 2",
                 "DetailsUrl": "https://example.com/issue/2",
-                "CreateDate": "2024-01-02T10:00:00Z",
-                "MeetingId": 123,
-                "MeetingName": "Weekly Meeting",
-                "OwnerName": "Jane Smith",
-                "OwnerId": 789,
-                "OwnerImageUrl": "https://example.com/jane.jpg",
-                "ClosedDate": "2024-01-03T10:00:00Z",
-                "CompletionDate": "2024-01-03T10:00:00Z",
+                "CreateTime": "2024-01-02T10:00:00Z",
+                "OriginId": 123,
+                "Origin": "Weekly Meeting",
+                "Owner": {
+                    "Id": 789,
+                    "Name": "Jane Smith",
+                    "ImageUrl": "https://example.com/jane.jpg",
+                },
+                "CloseTime": "2024-01-03T10:00:00Z",
+                "CompleteTime": "2024-01-03T10:00:00Z",
             },
         ]
 

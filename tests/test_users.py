@@ -57,7 +57,7 @@ class TestUserOperations:
 
         user_ops = UserOperations(mock_http_client)
 
-        result = user_ops.details(direct_reports=True)
+        result = user_ops.details(include_direct_reports=True)
 
         assert result.direct_reports is not None
         assert len(result.direct_reports) == 1

@@ -82,9 +82,9 @@ class TestTodoOperations:
         mock_http_client.post.assert_called_once_with(
             "L10/456/todos",
             json={
-                "title": "New Todo",
-                "accountableUserId": 123,
-                "notes": "Important task",
+                "Title": "New Todo",
+                "ForId": 123,
+                "Notes": "Important task",
                 "dueDate": "2024-12-31",
             },
         )
