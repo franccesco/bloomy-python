@@ -226,12 +226,12 @@ async def bulk_create_todos(client: AsyncClient, todos_data: list[dict]):
 async def sync_user_data(client: AsyncClient):
     """Sync all user data efficiently."""
     # Get all users
-    all_users = await client.user.all()
-    
+    all_users = await client.user.list()
+
     # Process users in batches to avoid overwhelming the API
     batch_size = 10
     user_details = []
-    
+
     for i in range(0, len(all_users), batch_size):
         batch = all_users[i:i + batch_size]
         batch_tasks = [
@@ -240,7 +240,7 @@ async def sync_user_data(client: AsyncClient):
         ]
         batch_results = await asyncio.gather(*batch_tasks)
         user_details.extend(batch_results)
-    
+
     return user_details
 ```
 

@@ -80,12 +80,17 @@ The Bloomy Python SDK is organized as a client-based architecture where all API 
    - Sync operations in `src/bloomy/operations/` inherit from `BaseOperations`
    - Async operations in `src/bloomy/operations/async_/` inherit from `AsyncBaseOperations`
    - Both inherit from `AbstractOperations` which provides shared logic
+   - Response transformation is handled by mixins in `src/bloomy/operations/mixins/` (e.g., `UserOperationsMixin`, `MeetingOperationsMixin`)
+   - Mixins use `_transform` suffix naming convention (e.g., `goals_transform.py`, `users_transform.py`)
+   - Generic bulk operations logic is provided in base classes (`_validate_bulk_item`, `_process_bulk_sync`, `_process_bulk_async`)
    - Operations are accessed via client attributes: `client.user`, `client.meeting`, etc.
 
 4. **Models (`src/bloomy/models.py`)**:
    - Pydantic models for type-safe API responses
    - All models inherit from `BloomyBaseModel` with common config
    - Field aliases map PascalCase API responses to snake_case Python attributes
+   - Reusable annotated types: `OptionalDatetime` and `OptionalFloat` using Pydantic's `BeforeValidator`
+   - Some models are type aliases for backward compatibility (e.g., `HeadlineListItem = HeadlineDetails`)
 
 5. **API Endpoints**:
    - Base URL: `https://app.bloomgrowth.com/api/v1`
@@ -101,7 +106,7 @@ The Bloomy Python SDK is organized as a client-based architecture where all API 
 3. **Error Handling**:
    - Custom exception hierarchy rooted at `BloomyError`
    - `APIError` includes status code
-   - HTTP errors are raised via `response.raise_for_status()`
+   - All operations consistently use `response.raise_for_status()` for error handling
 
 4. **Type Annotations**: Uses Python 3.12+ union syntax (`|`) and Pydantic models for structured return types.
 

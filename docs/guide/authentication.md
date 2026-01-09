@@ -260,8 +260,8 @@ client_account1 = Client(api_key="api-key-for-account-1")
 client_account2 = Client(api_key="api-key-for-account-2")
 
 # Use different clients for different operations
-users_account1 = client_account1.user.all()
-users_account2 = client_account2.user.all()
+users_account1 = client_account1.user.list()
+users_account2 = client_account2.user.list()
 ```
 
 ## Next Steps
