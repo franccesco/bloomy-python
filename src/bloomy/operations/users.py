@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ..models import DirectReport, Position, UserDetails, UserListItem, UserSearchResult
 from ..utils.base_operations import BaseOperations
-from .mixins.users import UserOperationsMixin
+from .mixins.users_transform import UserOperationsMixin
 
 
 class UserOperations(BaseOperations, UserOperationsMixin):

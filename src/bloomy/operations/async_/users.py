@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from ...models import (
     DirectReport,
     Position,
@@ -12,23 +10,11 @@ from ...models import (
     UserSearchResult,
 )
 from ...utils.async_base_operations import AsyncBaseOperations
-from ..mixins.users import UserOperationsMixin
-
-if TYPE_CHECKING:
-    import httpx
+from ..mixins.users_transform import UserOperationsMixin
 
 
 class AsyncUserOperations(AsyncBaseOperations, UserOperationsMixin):
     """Async class to handle all operations related to users."""
-
-    def __init__(self, client: httpx.AsyncClient) -> None:
-        """Initialize the async user operations.
-
-        Args:
-            client: The async HTTP client to use for API requests.
-
-        """
-        super().__init__(client)
 
     async def details(
         self,

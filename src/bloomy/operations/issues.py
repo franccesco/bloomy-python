@@ -6,16 +6,16 @@ import builtins
 from typing import Any
 
 from ..models import (
-    BulkCreateError,
     BulkCreateResult,
     CreatedIssue,
     IssueDetails,
     IssueListItem,
 )
 from ..utils.base_operations import BaseOperations
+from .mixins.issues_transform import IssueOperationsMixin
 
 
-class IssueOperations(BaseOperations):
+class IssueOperations(BaseOperations, IssueOperationsMixin):
     """Class to handle all operations related to issues.
 
     Provides functionality to create, retrieve, list, and solve issues
@@ -44,17 +44,7 @@ class IssueOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return IssueDetails(
-            id=data["Id"],
-            title=data["Name"],
-            notes_url=data["DetailsUrl"],
-            created_at=data["CreateTime"],
-            completed_at=data["CloseTime"],
-            meeting_id=data["OriginId"],
-            meeting_title=data["Origin"],
-            user_id=data["Owner"]["Id"],
-            user_name=data["Owner"]["Name"],
-        )
+        return self._transform_issue_details(data)
 
     def list(
         self, user_id: int | None = None, meeting_id: int | None = None
@@ -98,17 +88,7 @@ class IssueOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return [
-            IssueListItem(
-                id=issue["Id"],
-                title=issue["Name"],
-                notes_url=issue["DetailsUrl"],
-                created_at=issue["CreateTime"],
-                meeting_id=issue["OriginId"],
-                meeting_title=issue["Origin"],
-            )
-            for issue in data
-        ]
+        return self._transform_issue_list(data)
 
     def complete(self, issue_id: int) -> IssueDetails:
         """Mark an issue as completed/solved.
@@ -219,14 +199,7 @@ class IssueOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return CreatedIssue(
-            id=data["Id"],
-            meeting_id=data["OriginId"],
-            meeting_title=data["Origin"],
-            title=data["Name"],
-            user_id=data["Owner"]["Id"],
-            notes_url=data["DetailsUrl"],
-        )
+        return self._transform_created_issue(data)
 
     def create_many(
         self, issues: builtins.list[dict[str, Any]]
@@ -248,9 +221,6 @@ class IssueOperations(BaseOperations):
                 - successful: List of CreatedIssue instances for successful creations
                 - failed: List of BulkCreateError instances for failed creations
 
-        Raises:
-            ValueError: When required parameters are missing in issue data
-
         Example:
             ```python
             result = client.issue.create_many([
@@ -264,32 +234,15 @@ class IssueOperations(BaseOperations):
             ```
 
         """
-        successful: builtins.list[CreatedIssue] = []
-        failed: builtins.list[BulkCreateError] = []
 
-        for index, issue_data in enumerate(issues):
-            try:
-                # Extract parameters from the issue data
-                meeting_id = issue_data.get("meeting_id")
-                title = issue_data.get("title")
-                user_id = issue_data.get("user_id")
-                notes = issue_data.get("notes")
+        def _create_single(data: dict[str, Any]) -> CreatedIssue:
+            return self.create(
+                meeting_id=data["meeting_id"],
+                title=data["title"],
+                user_id=data.get("user_id"),
+                notes=data.get("notes"),
+            )
 
-                # Validate required parameters
-                if meeting_id is None:
-                    raise ValueError("meeting_id is required")
-                if title is None:
-                    raise ValueError("title is required")
-
-                # Create the issue
-                created_issue = self.create(
-                    meeting_id=meeting_id, title=title, user_id=user_id, notes=notes
-                )
-                successful.append(created_issue)
-
-            except Exception as e:
-                failed.append(
-                    BulkCreateError(index=index, input_data=issue_data, error=str(e))
-                )
-
-        return BulkCreateResult(successful=successful, failed=failed)
+        return self._process_bulk_sync(
+            issues, _create_single, required_fields=["meeting_id", "title"]
+        )

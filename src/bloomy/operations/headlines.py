@@ -8,13 +8,13 @@ from ..models import (
     HeadlineDetails,
     HeadlineInfo,
     HeadlineListItem,
-    MeetingInfo,
     OwnerDetails,
 )
 from ..utils.base_operations import BaseOperations
+from .mixins.headlines_transform import HeadlineOperationsMixin
 
 
-class HeadlineOperations(BaseOperations):
+class HeadlineOperations(BaseOperations, HeadlineOperationsMixin):
     """Class to handle all operations related to headlines."""
 
     def create(
@@ -84,22 +84,7 @@ class HeadlineOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return HeadlineDetails(
-            id=data["Id"],
-            title=data["Name"],
-            notes_url=data["DetailsUrl"],
-            meeting_details=MeetingInfo(
-                id=data["OriginId"],
-                title=data["Origin"],
-            ),
-            owner_details=OwnerDetails(
-                id=data["Owner"]["Id"],
-                name=data["Owner"]["Name"],
-            ),
-            archived=data["Archived"],
-            created_at=data["CreateTime"],
-            closed_at=data["CloseTime"],
-        )
+        return self._transform_headline_details(data)
 
     def list(
         self, user_id: int | None = None, meeting_id: int | None = None
@@ -153,24 +138,7 @@ class HeadlineOperations(BaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return [
-            HeadlineListItem(
-                id=headline["Id"],
-                title=headline["Name"],
-                meeting_details=MeetingInfo(
-                    id=headline["OriginId"],
-                    title=headline["Origin"],
-                ),
-                owner_details=OwnerDetails(
-                    id=headline["Owner"]["Id"],
-                    name=headline["Owner"]["Name"],
-                ),
-                archived=headline["Archived"],
-                created_at=headline["CreateTime"],
-                closed_at=headline["CloseTime"],
-            )
-            for headline in data
-        ]
+        return self._transform_headline_list(data)
 
     def delete(self, headline_id: int) -> None:
         """Delete a headline.

@@ -2,36 +2,24 @@
 
 from __future__ import annotations
 
-import asyncio
 import builtins
 from typing import TYPE_CHECKING
 
 from ...models import (
-    BulkCreateError,
     BulkCreateResult,
     CreatedIssue,
     IssueDetails,
     IssueListItem,
 )
 from ...utils.async_base_operations import AsyncBaseOperations
+from ..mixins.issues_transform import IssueOperationsMixin
 
 if TYPE_CHECKING:
     from typing import Any
 
-    import httpx
 
-
-class AsyncIssueOperations(AsyncBaseOperations):
+class AsyncIssueOperations(AsyncBaseOperations, IssueOperationsMixin):
     """Async class to handle all operations related to issues."""
-
-    def __init__(self, client: httpx.AsyncClient) -> None:
-        """Initialize the async issue operations.
-
-        Args:
-            client: The async HTTP client to use for API requests.
-
-        """
-        super().__init__(client)
 
     async def details(self, issue_id: int) -> IssueDetails:
         """Retrieve detailed information about a specific issue.
@@ -48,17 +36,7 @@ class AsyncIssueOperations(AsyncBaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return IssueDetails(
-            id=data["Id"],
-            title=data["Name"],
-            notes_url=data["DetailsUrl"],
-            created_at=data["CreateTime"],
-            completed_at=data["CloseTime"],
-            meeting_id=data["OriginId"],
-            meeting_title=data["Origin"],
-            user_id=data["Owner"]["Id"],
-            user_name=data["Owner"]["Name"],
-        )
+        return self._transform_issue_details(data)
 
     async def list(
         self, user_id: int | None = None, meeting_id: int | None = None
@@ -91,17 +69,7 @@ class AsyncIssueOperations(AsyncBaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return [
-            IssueListItem(
-                id=issue["Id"],
-                title=issue["Name"],
-                notes_url=issue["DetailsUrl"],
-                created_at=issue["CreateTime"],
-                meeting_id=issue["OriginId"],
-                meeting_title=issue["Origin"],
-            )
-            for issue in data
-        ]
+        return self._transform_issue_list(data)
 
     async def complete(self, issue_id: int) -> IssueDetails:
         """Mark an issue as completed/solved.
@@ -202,14 +170,7 @@ class AsyncIssueOperations(AsyncBaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return CreatedIssue(
-            id=data["Id"],
-            meeting_id=data["OriginId"],
-            meeting_title=data["Origin"],
-            title=data["Name"],
-            user_id=data["Owner"]["Id"],
-            notes_url=data["DetailsUrl"],
-        )
+        return self._transform_created_issue(data)
 
     async def create_many(
         self, issues: builtins.list[dict[str, Any]], max_concurrent: int = 5
@@ -247,68 +208,18 @@ class AsyncIssueOperations(AsyncBaseOperations):
             ```
 
         """
-        # Create a semaphore to limit concurrent requests
-        semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def create_single_issue(
-            index: int, issue_data: dict[str, Any]
-        ) -> tuple[int, CreatedIssue | BulkCreateError]:
-            """Create a single issue with error handling.
+        async def _create_single(data: dict[str, Any]) -> CreatedIssue:
+            return await self.create(
+                meeting_id=data["meeting_id"],
+                title=data["title"],
+                user_id=data.get("user_id"),
+                notes=data.get("notes"),
+            )
 
-            Returns:
-                Tuple of (index, result) where result is either CreatedIssue
-                or BulkCreateError.
-
-            Raises:
-                ValueError: When required parameters are missing.
-
-            """
-            async with semaphore:
-                try:
-                    # Extract parameters from the issue data
-                    meeting_id = issue_data.get("meeting_id")
-                    title = issue_data.get("title")
-                    user_id = issue_data.get("user_id")
-                    notes = issue_data.get("notes")
-
-                    # Validate required parameters
-                    if meeting_id is None:
-                        raise ValueError("meeting_id is required")
-                    if title is None:
-                        raise ValueError("title is required")
-
-                    # Create the issue
-                    created_issue = await self.create(
-                        meeting_id=meeting_id, title=title, user_id=user_id, notes=notes
-                    )
-                    return (index, created_issue)
-
-                except Exception as e:
-                    error = BulkCreateError(
-                        index=index, input_data=issue_data, error=str(e)
-                    )
-                    return (index, error)
-
-        # Create tasks for all issues
-        tasks = [
-            create_single_issue(index, issue_data)
-            for index, issue_data in enumerate(issues)
-        ]
-
-        # Execute all tasks concurrently
-        results = await asyncio.gather(*tasks)
-
-        # Sort results to maintain order
-        results.sort(key=lambda x: x[0])
-
-        # Separate successful and failed results
-        successful: builtins.list[CreatedIssue] = []
-        failed: builtins.list[BulkCreateError] = []
-
-        for _, result in results:
-            if isinstance(result, CreatedIssue):
-                successful.append(result)
-            else:
-                failed.append(result)
-
-        return BulkCreateResult(successful=successful, failed=failed)
+        return await self._process_bulk_async(
+            issues,
+            _create_single,
+            required_fields=["meeting_id", "title"],
+            max_concurrent=max_concurrent,
+        )
