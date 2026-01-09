@@ -97,7 +97,7 @@ class TestMiscCoverage:
 
     def test_mixins_type_checking(self) -> None:
         """Test mixins TYPE_CHECKING imports."""
-        from bloomy.operations.mixins import users
+        from bloomy.operations.mixins import users_transform
 
         # Mixins should have TYPE_CHECKING
-        assert hasattr(users, "TYPE_CHECKING")
+        assert hasattr(users_transform, "TYPE_CHECKING")
