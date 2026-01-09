@@ -4,9 +4,38 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+
+
+def _parse_optional_datetime(v: Any) -> datetime | None:
+    """Parse optional datetime fields, treating empty strings as None.
+
+    Returns:
+        The datetime value or None if empty/None.
+
+    """
+    if v is None or v == "":
+        return None
+    return v
+
+
+def _parse_optional_float(v: Any) -> float | None:
+    """Parse optional float fields, treating empty strings as None.
+
+    Returns:
+        The float value or None if empty/None.
+
+    """
+    if v is None or v == "":
+        return None
+    return float(v)
+
+
+# Reusable annotated types for optional fields that may come as empty strings
+OptionalDatetime = Annotated[datetime | None, BeforeValidator(_parse_optional_datetime)]
+OptionalFloat = Annotated[float | None, BeforeValidator(_parse_optional_float)]
 
 
 class GoalStatus(StrEnum):
@@ -122,25 +151,12 @@ class Todo(BloomyBaseModel):
     id: int = Field(alias="Id")
     name: str = Field(alias="Name")
     details_url: str | None = Field(alias="DetailsUrl", default=None)
-    due_date: datetime | None = Field(alias="DueDate", default=None)
-    complete_date: datetime | None = Field(alias="CompleteTime", default=None)
-    create_date: datetime | None = Field(alias="CreateTime", default=None)
+    due_date: OptionalDatetime = Field(alias="DueDate", default=None)
+    complete_date: OptionalDatetime = Field(alias="CompleteTime", default=None)
+    create_date: OptionalDatetime = Field(alias="CreateTime", default=None)
     meeting_id: int | None = Field(alias="OriginId", default=None)
     meeting_name: str | None = Field(alias="Origin", default=None)
     complete: bool = Field(alias="Complete", default=False)
-
-    @field_validator("due_date", "complete_date", "create_date", mode="before")
-    @classmethod
-    def parse_optional_datetime(cls, v: Any) -> datetime | None:
-        """Parse optional datetime fields.
-
-        Returns:
-            The parsed datetime or None if empty.
-
-        """
-        if v is None or v == "":
-            return None
-        return v
 
 
 class Issue(BloomyBaseModel):
@@ -155,21 +171,8 @@ class Issue(BloomyBaseModel):
     owner_name: str = Field(alias="OwnerName")
     owner_id: int = Field(alias="OwnerId")
     owner_image_url: str = Field(alias="OwnerImageUrl")
-    closed_date: datetime | None = Field(alias="ClosedDate", default=None)
-    completion_date: datetime | None = Field(alias="CompletionDate", default=None)
-
-    @field_validator("closed_date", "completion_date", mode="before")
-    @classmethod
-    def parse_optional_datetime(cls, v: Any) -> datetime | None:
-        """Parse optional datetime fields.
-
-        Returns:
-            The parsed datetime or None if empty.
-
-        """
-        if v is None or v == "":
-            return None
-        return v
+    closed_date: OptionalDatetime = Field(alias="ClosedDate", default=None)
+    completion_date: OptionalDatetime = Field(alias="CompletionDate", default=None)
 
 
 class Headline(BloomyBaseModel):
@@ -192,25 +195,12 @@ class Goal(BloomyBaseModel):
     id: int = Field(alias="Id")
     name: str = Field(alias="Name")
     due_date: datetime = Field(alias="DueDate")
-    complete_date: datetime | None = Field(alias="CompleteDate", default=None)
+    complete_date: OptionalDatetime = Field(alias="CompleteDate", default=None)
     create_date: datetime = Field(alias="CreateDate")
     is_archived: bool = Field(alias="IsArchived", default=False)
     percent_complete: float = Field(alias="PercentComplete", default=0.0)
     accountable_user_id: int = Field(alias="AccountableUserId")
     accountable_user_name: str | None = Field(alias="AccountableUserName", default=None)
-
-    @field_validator("complete_date", mode="before")
-    @classmethod
-    def parse_optional_datetime(cls, v: Any) -> datetime | None:
-        """Parse optional datetime fields.
-
-        Returns:
-            The parsed datetime or None if empty.
-
-        """
-        if v is None or v == "":
-            return None
-        return v
 
 
 class ScorecardMetric(BloomyBaseModel):
@@ -218,27 +208,14 @@ class ScorecardMetric(BloomyBaseModel):
 
     id: int = Field(alias="Id")
     title: str = Field(alias="Title")
-    target: float | None = Field(alias="Target", default=None)
+    target: OptionalFloat = Field(alias="Target", default=None)
     unit: str | None = Field(alias="Unit", default=None)
     week_number: int = Field(alias="WeekNumber")
-    value: float | None = Field(alias="Value", default=None)
+    value: OptionalFloat = Field(alias="Value", default=None)
     metric_type: str = Field(alias="MetricType")
     accountable_user_id: int = Field(alias="AccountableUserId")
     accountable_user_name: str | None = Field(alias="AccountableUserName", default=None)
     is_inverse: bool = Field(alias="IsInverse", default=False)
-
-    @field_validator("target", "value", mode="before")
-    @classmethod
-    def parse_optional_float(cls, v: Any) -> float | None:
-        """Parse optional float fields.
-
-        Returns:
-            The parsed float or None if empty.
-
-        """
-        if v is None or v == "":
-            return None
-        return float(v)
 
 
 class CurrentWeek(BloomyBaseModel):
@@ -380,7 +357,7 @@ class HeadlineDetails(BloomyBaseModel):
 
     id: int
     title: str
-    notes_url: str
+    notes_url: str | None = None
     meeting_details: MeetingInfo
     owner_details: OwnerDetails
     archived: bool
@@ -388,16 +365,8 @@ class HeadlineDetails(BloomyBaseModel):
     closed_at: str | None = None
 
 
-class HeadlineListItem(BloomyBaseModel):
-    """Model for headline list items."""
-
-    id: int
-    title: str
-    meeting_details: MeetingInfo
-    owner_details: OwnerDetails
-    archived: bool
-    created_at: str
-    closed_at: str | None = None
+# HeadlineListItem is identical to HeadlineDetails - use type alias
+HeadlineListItem = HeadlineDetails
 
 
 class BulkCreateError(BloomyBaseModel):
