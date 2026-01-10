@@ -59,4 +59,4 @@ jobs:
         run: uv sync --all-extras
 
       - name: Type check
-        run: uv run pyright
+        run: uv run basedpyright

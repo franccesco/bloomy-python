@@ -18,7 +18,7 @@ dev = [
   "pytest-cov>=5.0.0",
   "pytest-asyncio>=0.23.0",
   "ruff>=0.5.0",
-  "pyright>=1.1.0",
+  "basedpyright>=1.1.0",
 ]
 
 [build-system]
@@ -69,7 +69,7 @@ max-complexity = 10
 quote-style = "double"
 indent-style = "space"
 
-[tool.pyright]
+[tool.basedpyright]
 include = ["src"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
