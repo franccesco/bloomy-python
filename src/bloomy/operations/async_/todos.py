@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
 import builtins
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ...models import BulkCreateError, BulkCreateResult, Todo
+from ...models import BulkCreateResult, Todo
 from ...utils.async_base_operations import AsyncBaseOperations
+from ..mixins.todos_transform import TodoOperationsMixin
 
 if TYPE_CHECKING:
     from typing import Any
 
-    import httpx
 
-
-class AsyncTodoOperations(AsyncBaseOperations):
+class AsyncTodoOperations(AsyncBaseOperations, TodoOperationsMixin):
     """Async class to handle all operations related to todos.
 
     Note:
@@ -24,15 +22,6 @@ class AsyncTodoOperations(AsyncBaseOperations):
         `client.todo.method`
 
     """
-
-    def __init__(self, client: httpx.AsyncClient) -> None:
-        """Initialize the async todo operations.
-
-        Args:
-            client: The async HTTP client to use for API requests.
-
-        """
-        super().__init__(client)
 
     async def list(
         self, user_id: int | None = None, meeting_id: int | None = None
@@ -112,30 +101,13 @@ class AsyncTodoOperations(AsyncBaseOperations):
         if user_id is None:
             user_id = await self.get_user_id()
 
-        payload: dict[str, Any] = {
-            "title": title,
-            "accountableUserId": user_id,
-        }
-
-        if notes is not None:
-            payload["notes"] = notes
-
-        if due_date is not None:
-            payload["dueDate"] = due_date
-
         if meeting_id is not None:
-            # Meeting todo - use the correct endpoint with PascalCase keys
-            payload = {
-                "Title": title,
-                "ForId": user_id,
-            }
-            if notes is not None:
-                payload["Notes"] = notes
-            if due_date is not None:
-                payload["dueDate"] = due_date
+            # Meeting todo
+            payload = self._build_meeting_todo_payload(title, user_id, notes, due_date)
             response = await self._client.post(f"L10/{meeting_id}/todos", json=payload)
         else:
             # User todo
+            payload = self._build_user_todo_payload(title, user_id, notes, due_date)
             response = await self._client.post("todo/create", json=payload)
 
         response.raise_for_status()
@@ -194,7 +166,6 @@ class AsyncTodoOperations(AsyncBaseOperations):
 
         Raises:
             ValueError: If no update fields are provided
-            RuntimeError: If the update request fails
 
         Example:
             ```python
@@ -217,9 +188,7 @@ class AsyncTodoOperations(AsyncBaseOperations):
             raise ValueError("At least one field must be provided")
 
         response = await self._client.put(f"todo/{todo_id}", json=payload)
-
-        if response.status_code != 200:
-            raise RuntimeError(f"Failed to update todo. Status: {response.status_code}")
+        response.raise_for_status()
 
         # Fetch the updated todo details
         return await self.details(todo_id)
@@ -233,9 +202,6 @@ class AsyncTodoOperations(AsyncBaseOperations):
         Returns:
             A Todo model instance containing the todo details
 
-        Raises:
-            RuntimeError: If the request to retrieve the todo details fails
-
         Example:
             ```python
             await client.todo.details(1)
@@ -244,12 +210,6 @@ class AsyncTodoOperations(AsyncBaseOperations):
 
         """
         response = await self._client.get(f"todo/{todo_id}")
-
-        if not response.is_success:
-            raise RuntimeError(
-                f"Failed to get todo details. Status: {response.status_code}"
-            )
-
         response.raise_for_status()
         todo = response.json()
 
@@ -292,73 +252,19 @@ class AsyncTodoOperations(AsyncBaseOperations):
             ```
 
         """
-        # Create a semaphore to limit concurrent requests
-        semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def create_single_todo(
-            index: int, todo_data: dict[str, Any]
-        ) -> tuple[int, Todo | BulkCreateError]:
-            """Create a single todo with error handling.
+        async def _create_single(data: dict[str, Any]) -> Todo:
+            return await self.create(
+                title=data["title"],
+                meeting_id=data["meeting_id"],
+                due_date=data.get("due_date"),
+                user_id=data.get("user_id"),
+                notes=data.get("notes"),
+            )
 
-            Returns:
-                Tuple of (index, result) where result is either Todo or
-                BulkCreateError.
-
-            Raises:
-                ValueError: When required parameters are missing.
-
-            """
-            async with semaphore:
-                try:
-                    # Extract parameters from the todo data
-                    title = todo_data.get("title")
-                    meeting_id = todo_data.get("meeting_id")
-                    due_date = todo_data.get("due_date")
-                    user_id = todo_data.get("user_id")
-                    notes = todo_data.get("notes")
-
-                    # Validate required parameters
-                    if title is None:
-                        raise ValueError("title is required")
-                    if meeting_id is None:
-                        raise ValueError("meeting_id is required")
-
-                    # Create the todo
-                    created_todo = await self.create(
-                        title=title,
-                        meeting_id=meeting_id,
-                        due_date=due_date,
-                        user_id=user_id,
-                        notes=notes,
-                    )
-                    return (index, created_todo)
-
-                except Exception as e:
-                    error = BulkCreateError(
-                        index=index, input_data=todo_data, error=str(e)
-                    )
-                    return (index, error)
-
-        # Create tasks for all todos
-        tasks = [
-            create_single_todo(index, todo_data)
-            for index, todo_data in enumerate(todos)
-        ]
-
-        # Execute all tasks concurrently
-        results = await asyncio.gather(*tasks)
-
-        # Sort results to maintain order
-        results.sort(key=lambda x: x[0])
-
-        # Separate successful and failed results
-        successful: builtins.list[Todo] = []
-        failed: builtins.list[BulkCreateError] = []
-
-        for _, result in results:
-            if isinstance(result, Todo):
-                successful.append(result)
-            else:
-                failed.append(result)
-
-        return BulkCreateResult(successful=successful, failed=failed)
+        return await self._process_bulk_async(
+            todos,
+            _create_single,
+            required_fields=["title", "meeting_id"],
+            max_concurrent=max_concurrent,
+        )

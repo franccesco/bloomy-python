@@ -6,14 +6,15 @@ import builtins
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ..models import BulkCreateError, BulkCreateResult, Todo
+from ..models import BulkCreateResult, Todo
 from ..utils.base_operations import BaseOperations
+from .mixins.todos_transform import TodoOperationsMixin
 
 if TYPE_CHECKING:
     from typing import Any
 
 
-class TodoOperations(BaseOperations):
+class TodoOperations(BaseOperations, TodoOperationsMixin):
     """Class to handle all operations related to todos.
 
     Note:
@@ -100,30 +101,13 @@ class TodoOperations(BaseOperations):
         if user_id is None:
             user_id = self.user_id
 
-        payload: dict[str, Any] = {
-            "title": title,
-            "accountableUserId": user_id,
-        }
-
-        if notes is not None:
-            payload["notes"] = notes
-
-        if due_date is not None:
-            payload["dueDate"] = due_date
-
         if meeting_id is not None:
-            # Meeting todo - use the correct endpoint
-            payload = {
-                "Title": title,
-                "ForId": user_id,
-            }
-            if notes is not None:
-                payload["Notes"] = notes
-            if due_date is not None:
-                payload["dueDate"] = due_date
+            # Meeting todo
+            payload = self._build_meeting_todo_payload(title, user_id, notes, due_date)
             response = self._client.post(f"L10/{meeting_id}/todos", json=payload)
         else:
             # User todo
+            payload = self._build_user_todo_payload(title, user_id, notes, due_date)
             response = self._client.post("todo/create", json=payload)
 
         response.raise_for_status()
@@ -182,7 +166,6 @@ class TodoOperations(BaseOperations):
 
         Raises:
             ValueError: If no update fields are provided
-            RuntimeError: If the update request fails
 
         Example:
             ```python
@@ -205,9 +188,7 @@ class TodoOperations(BaseOperations):
             raise ValueError("At least one field must be provided")
 
         response = self._client.put(f"todo/{todo_id}", json=payload)
-
-        if response.status_code != 200:
-            raise RuntimeError(f"Failed to update todo. Status: {response.status_code}")
+        response.raise_for_status()
 
         # Fetch the updated todo details
         return self.details(todo_id)
@@ -221,9 +202,6 @@ class TodoOperations(BaseOperations):
         Returns:
             A Todo model instance containing the todo details
 
-        Raises:
-            RuntimeError: If the request to retrieve the todo details fails
-
         Example:
             ```python
             client.todo.details(1)
@@ -232,12 +210,6 @@ class TodoOperations(BaseOperations):
 
         """
         response = self._client.get(f"todo/{todo_id}")
-
-        if not response.is_success:
-            raise RuntimeError(
-                f"Failed to get todo details. Status: {response.status_code}"
-            )
-
         response.raise_for_status()
         todo = response.json()
 
@@ -265,9 +237,6 @@ class TodoOperations(BaseOperations):
                 - successful: List of Todo instances for successful creations
                 - failed: List of BulkCreateError instances for failed creations
 
-        Raises:
-            ValueError: When required parameters are missing in todo data
-
         Example:
             ```python
             result = client.todo.create_many([
@@ -281,37 +250,16 @@ class TodoOperations(BaseOperations):
             ```
 
         """
-        successful: builtins.list[Todo] = []
-        failed: builtins.list[BulkCreateError] = []
 
-        for index, todo_data in enumerate(todos):
-            try:
-                # Extract parameters from the todo data
-                title = todo_data.get("title")
-                meeting_id = todo_data.get("meeting_id")
-                due_date = todo_data.get("due_date")
-                user_id = todo_data.get("user_id")
-                notes = todo_data.get("notes")
+        def _create_single(data: dict[str, Any]) -> Todo:
+            return self.create(
+                title=data["title"],
+                meeting_id=data["meeting_id"],
+                due_date=data.get("due_date"),
+                user_id=data.get("user_id"),
+                notes=data.get("notes"),
+            )
 
-                # Validate required parameters
-                if title is None:
-                    raise ValueError("title is required")
-                if meeting_id is None:
-                    raise ValueError("meeting_id is required")
-
-                # Create the todo
-                created_todo = self.create(
-                    title=title,
-                    meeting_id=meeting_id,
-                    due_date=due_date,
-                    user_id=user_id,
-                    notes=notes,
-                )
-                successful.append(created_todo)
-
-            except Exception as e:
-                failed.append(
-                    BulkCreateError(index=index, input_data=todo_data, error=str(e))
-                )
-
-        return BulkCreateResult(successful=successful, failed=failed)
+        return self._process_bulk_sync(
+            todos, _create_single, required_fields=["title", "meeting_id"]
+        )

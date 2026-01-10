@@ -18,12 +18,13 @@ from ...models import (
     Todo,
 )
 from ...utils.async_base_operations import AsyncBaseOperations
+from ..mixins.meetings_transform import MeetingOperationsMixin
 
 if TYPE_CHECKING:
-    import httpx
+    pass
 
 
-class AsyncMeetingOperations(AsyncBaseOperations):
+class AsyncMeetingOperations(AsyncBaseOperations, MeetingOperationsMixin):
     """Async class to handle all operations related to meetings.
 
     Note:
@@ -31,15 +32,6 @@ class AsyncMeetingOperations(AsyncBaseOperations):
         `client.meeting.method`
 
     """
-
-    def __init__(self, client: httpx.AsyncClient) -> None:
-        """Initialize the async meeting operations.
-
-        Args:
-            client: The async HTTP client to use for API requests.
-
-        """
-        super().__init__(client)
 
     async def list(self, user_id: int | None = None) -> builtins.list[MeetingListItem]:
         """List all meetings for a specific user.
@@ -87,17 +79,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
         response.raise_for_status()
         data: Any = response.json()
 
-        # Map Id to UserId for compatibility
-        return [
-            MeetingAttendee.model_validate(
-                {
-                    "UserId": attendee["Id"],
-                    "Name": attendee["Name"],
-                    "ImageUrl": attendee["ImageUrl"],
-                }
-            )
-            for attendee in data
-        ]
+        return self._transform_attendees(data)
 
     async def issues(
         self, meeting_id: int, include_closed: bool = False
@@ -126,25 +108,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
         response.raise_for_status()
         data: Any = response.json()
 
-        # Map meeting issue format to Issue model format
-        return [
-            Issue.model_validate(
-                {
-                    "Id": issue["Id"],
-                    "Name": issue["Name"],
-                    "DetailsUrl": issue.get("DetailsUrl"),
-                    "CreateDate": issue["CreateTime"],
-                    "MeetingId": issue["OriginId"],
-                    "MeetingName": issue["Origin"],
-                    "OwnerName": issue["Owner"]["Name"],
-                    "OwnerId": issue["Owner"]["Id"],
-                    "OwnerImageUrl": issue["Owner"]["ImageUrl"],
-                    "ClosedDate": issue.get("CloseTime"),
-                    "CompletionDate": issue.get("CompleteTime"),
-                }
-            )
-            for issue in data
-        ]
+        return self._transform_meeting_issues(data, meeting_id)
 
     async def todos(
         self, meeting_id: int, include_closed: bool = False
@@ -195,45 +159,7 @@ class AsyncMeetingOperations(AsyncBaseOperations):
         response.raise_for_status()
         raw_data = response.json()
 
-        if not isinstance(raw_data, list):
-            return []
-
-        metrics: list[ScorecardMetric] = []
-        # Type the list explicitly
-        data_list: list[Any] = raw_data  # type: ignore[assignment]
-        for item in data_list:
-            if not isinstance(item, dict):
-                continue
-
-            # Cast to Any dict to satisfy type checker
-            item_dict: dict[str, Any] = item  # type: ignore[assignment]
-            measurable_id = item_dict.get("Id")
-            measurable_name = item_dict.get("Name")
-
-            if not measurable_id or not measurable_name:
-                continue
-
-            owner_data = item_dict.get("Owner", {})
-            if not isinstance(owner_data, dict):
-                owner_data = {}
-            owner_dict: dict[str, Any] = owner_data  # type: ignore[assignment]
-
-            metrics.append(
-                ScorecardMetric(
-                    Id=int(measurable_id),
-                    Title=str(measurable_name).strip(),
-                    Target=float(item_dict.get("Target", 0)),
-                    Unit=str(item_dict.get("Modifiers", "")),
-                    WeekNumber=0,  # Not provided in this endpoint
-                    Value=None,
-                    MetricType=str(item_dict.get("Direction", "")),
-                    AccountableUserId=int(owner_dict.get("Id") or 0),
-                    AccountableUserName=str(owner_dict.get("Name") or ""),
-                    IsInverse=False,
-                )
-            )
-
-        return metrics
+        return self._transform_metrics(raw_data)
 
     async def details(
         self, meeting_id: int, include_closed: bool = False
@@ -396,68 +322,20 @@ class AsyncMeetingOperations(AsyncBaseOperations):
             ```
 
         """
-        # Create a semaphore to limit concurrent requests
-        semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def create_single_meeting(
-            index: int, meeting_data: dict[str, Any]
-        ) -> tuple[int, dict[str, Any] | BulkCreateError]:
-            """Create a single meeting with error handling.
+        async def _create_single(data: dict[str, Any]) -> dict[str, Any]:
+            return await self.create(
+                title=data["title"],
+                add_self=data.get("add_self", True),
+                attendees=data.get("attendees"),
+            )
 
-            Returns:
-                Tuple of (index, result) where result is either dict or
-                BulkCreateError.
-
-            Raises:
-                ValueError: When required parameters are missing.
-
-            """
-            async with semaphore:
-                try:
-                    # Extract parameters from the meeting data
-                    title = meeting_data.get("title")
-                    add_self = meeting_data.get("add_self", True)
-                    attendees = meeting_data.get("attendees")
-
-                    # Validate required parameters
-                    if title is None:
-                        raise ValueError("title is required")
-
-                    # Create the meeting
-                    created_meeting = await self.create(
-                        title=title, add_self=add_self, attendees=attendees
-                    )
-                    return (index, created_meeting)
-
-                except Exception as e:
-                    error = BulkCreateError(
-                        index=index, input_data=meeting_data, error=str(e)
-                    )
-                    return (index, error)
-
-        # Create tasks for all meetings
-        tasks = [
-            create_single_meeting(index, meeting_data)
-            for index, meeting_data in enumerate(meetings)
-        ]
-
-        # Execute all tasks concurrently
-        results = await asyncio.gather(*tasks)
-
-        # Sort results to maintain order
-        results.sort(key=lambda x: x[0])
-
-        # Separate successful and failed results
-        successful: builtins.list[dict[str, Any]] = []
-        failed: builtins.list[BulkCreateError] = []
-
-        for _, result in results:
-            if isinstance(result, dict):
-                successful.append(result)
-            else:
-                failed.append(result)
-
-        return BulkCreateResult(successful=successful, failed=failed)
+        return await self._process_bulk_async(
+            meetings,
+            _create_single,
+            required_fields=["title"],
+            max_concurrent=max_concurrent,
+        )
 
     async def get_many(
         self, meeting_ids: list[int], max_concurrent: int = 5

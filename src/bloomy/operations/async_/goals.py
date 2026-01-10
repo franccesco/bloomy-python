@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import builtins
 from typing import TYPE_CHECKING
 
 from ...models import (
     ArchivedGoalInfo,
-    BulkCreateError,
     BulkCreateResult,
     CreatedGoalInfo,
     GoalInfo,
@@ -16,24 +14,14 @@ from ...models import (
     GoalStatus,
 )
 from ...utils.async_base_operations import AsyncBaseOperations
+from ..mixins.goals_transform import GoalOperationsMixin
 
 if TYPE_CHECKING:
     from typing import Any
 
-    import httpx
 
-
-class AsyncGoalOperations(AsyncBaseOperations):
+class AsyncGoalOperations(AsyncBaseOperations, GoalOperationsMixin):
     """Async class to handle all operations related to goals (aka "rocks")."""
-
-    def __init__(self, client: httpx.AsyncClient) -> None:
-        """Initialize the async goal operations.
-
-        Args:
-            client: The async HTTP client to use for API requests.
-
-        """
-        super().__init__(client)
 
     async def list(
         self, user_id: int | None = None, archived: bool = False
@@ -60,22 +48,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        active_goals: list[GoalInfo] = [
-            GoalInfo(
-                id=goal["Id"],
-                user_id=goal["Owner"]["Id"],
-                user_name=goal["Owner"]["Name"],
-                title=goal["Name"],
-                created_at=goal["CreateTime"],
-                due_date=goal["DueDate"],
-                status="Completed" if goal.get("Complete") else "Incomplete",
-                meeting_id=goal["Origins"][0]["Id"] if goal.get("Origins") else None,
-                meeting_title=(
-                    goal["Origins"][0]["Name"] if goal.get("Origins") else None
-                ),
-            )
-            for goal in data
-        ]
+        active_goals = self._transform_goal_list(data)
 
         if archived:
             archived_goals = await self._get_archived_goals(user_id)
@@ -106,20 +79,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        # Map completion status
-        completion_map = {2: "complete", 1: "on", 0: "off"}
-        status = completion_map.get(data.get("Completion", 0), "off")
-
-        return CreatedGoalInfo(
-            id=data["Id"],
-            user_id=user_id,
-            user_name=data["Owner"]["Name"],
-            title=title,
-            meeting_id=meeting_id,
-            meeting_title=data["Origins"][0]["Name"],
-            status=status,
-            created_at=data["CreateTime"],
-        )
+        return self._transform_created_goal(data, title, meeting_id, user_id)
 
     async def delete(self, goal_id: int) -> None:
         """Delete a goal.
@@ -148,29 +108,13 @@ class AsyncGoalOperations(AsyncBaseOperations):
             status: The status value. Can be a GoalStatus enum member or string
                 ('on', 'off', or 'complete'). Use GoalStatus.ON_TRACK,
                 GoalStatus.AT_RISK, or GoalStatus.COMPLETE for type safety.
-
-        Raises:
-            ValueError: If an invalid status value is provided
+                Invalid values will raise ValueError via the update payload builder.
 
         """
         if accountable_user is None:
             accountable_user = await self.get_user_id()
 
-        payload: dict[str, Any] = {"accountableUserId": accountable_user}
-
-        if title is not None:
-            payload["title"] = title
-
-        if status is not None:
-            valid_status = {"on": "OnTrack", "off": "AtRisk", "complete": "Complete"}
-            # Handle both GoalStatus enum and string
-            status_value = status.value if isinstance(status, GoalStatus) else status
-            status_key = status_value.lower()
-            if status_key not in valid_status:
-                raise ValueError(
-                    "Invalid status value. Must be 'on', 'off', or 'complete'."
-                )
-            payload["completion"] = valid_status[status_key]
+        payload = self._build_goal_update_payload(accountable_user, title, status)
 
         response = await self._client.put(f"rocks/{goal_id}", json=payload)
         response.raise_for_status()
@@ -214,16 +158,7 @@ class AsyncGoalOperations(AsyncBaseOperations):
         response.raise_for_status()
         data = response.json()
 
-        return [
-            ArchivedGoalInfo(
-                id=goal["Id"],
-                title=goal["Name"],
-                created_at=goal["CreateTime"],
-                due_date=goal["DueDate"],
-                status="Complete" if goal.get("Complete") else "Incomplete",
-            )
-            for goal in data
-        ]
+        return self._transform_archived_goals(data)
 
     async def create_many(
         self, goals: builtins.list[dict[str, Any]], max_concurrent: int = 5
@@ -260,67 +195,17 @@ class AsyncGoalOperations(AsyncBaseOperations):
             ```
 
         """
-        # Create a semaphore to limit concurrent requests
-        semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def create_single_goal(
-            index: int, goal_data: dict[str, Any]
-        ) -> tuple[int, CreatedGoalInfo | BulkCreateError]:
-            """Create a single goal with error handling.
+        async def _create_single(data: dict[str, Any]) -> CreatedGoalInfo:
+            return await self.create(
+                title=data["title"],
+                meeting_id=data["meeting_id"],
+                user_id=data.get("user_id"),
+            )
 
-            Returns:
-                Tuple of (index, result) where result is either CreatedGoalInfo
-                or BulkCreateError.
-
-            Raises:
-                ValueError: When required parameters are missing.
-
-            """
-            async with semaphore:
-                try:
-                    # Extract parameters from the goal data
-                    title = goal_data.get("title")
-                    meeting_id = goal_data.get("meeting_id")
-                    user_id = goal_data.get("user_id")
-
-                    # Validate required parameters
-                    if title is None:
-                        raise ValueError("title is required")
-                    if meeting_id is None:
-                        raise ValueError("meeting_id is required")
-
-                    # Create the goal
-                    created_goal = await self.create(
-                        title=title, meeting_id=meeting_id, user_id=user_id
-                    )
-                    return (index, created_goal)
-
-                except Exception as e:
-                    error = BulkCreateError(
-                        index=index, input_data=goal_data, error=str(e)
-                    )
-                    return (index, error)
-
-        # Create tasks for all goals
-        tasks = [
-            create_single_goal(index, goal_data)
-            for index, goal_data in enumerate(goals)
-        ]
-
-        # Execute all tasks concurrently
-        results = await asyncio.gather(*tasks)
-
-        # Sort results to maintain order
-        results.sort(key=lambda x: x[0])
-
-        # Separate successful and failed results
-        successful: builtins.list[CreatedGoalInfo] = []
-        failed: builtins.list[BulkCreateError] = []
-
-        for _, result in results:
-            if isinstance(result, CreatedGoalInfo):
-                successful.append(result)
-            else:
-                failed.append(result)
-
-        return BulkCreateResult(successful=successful, failed=failed)
+        return await self._process_bulk_async(
+            goals,
+            _create_single,
+            required_fields=["title", "meeting_id"],
+            max_concurrent=max_concurrent,
+        )

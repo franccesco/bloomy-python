@@ -23,6 +23,9 @@ Each bulk operation returns a `BulkCreateResult` containing:
 !!! note "Best-Effort Processing"
     Bulk operations are not transactional. If one item fails, the operation continues with the remaining items. Always check both successful and failed results.
 
+!!! tip "Enhanced in v0.21.0"
+    Bulk operations now use generic validation and processing helpers in the base classes, providing consistent error handling and performance across all resource types.
+
 ## BulkCreateResult Structure
 
 ```python

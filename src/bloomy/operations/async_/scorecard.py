@@ -3,26 +3,13 @@
 from __future__ import annotations
 
 import builtins
-from typing import TYPE_CHECKING
 
 from ...models import ScorecardItem, ScorecardWeek
 from ...utils.async_base_operations import AsyncBaseOperations
 
-if TYPE_CHECKING:
-    import httpx
-
 
 class AsyncScorecardOperations(AsyncBaseOperations):
     """Async class to handle all operations related to scorecards."""
-
-    def __init__(self, client: httpx.AsyncClient) -> None:
-        """Initialize the async scorecard operations.
-
-        Args:
-            client: The async HTTP client to use for API requests.
-
-        """
-        super().__init__(client)
 
     async def current_week(self) -> ScorecardWeek:
         """Retrieve the current week details.

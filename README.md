@@ -5,7 +5,7 @@
 
 A Python SDK for interacting with the Bloom Growth API, providing easy access to users, meetings, todos, goals, scorecards, issues, and headlines.
 
-✨ **New in v0.13.0**: Full async/await support with `AsyncClient` for better performance in async applications!
+✨ **New in v0.21.0**: Improved internal architecture with reusable mixins and enhanced bulk operation performance!
 
 ## Installation
 
@@ -59,13 +59,13 @@ asyncio.run(main())
 user = client.user.details()
 
 # Get user with direct reports and positions
-user = client.user.details(user_id=123, all=True)
+user = client.user.details(user_id=123, include_all=True)
 
 # Search users
 results = client.user.search("john")
 
-# Get all users
-users = client.user.all()
+# List all users
+users = client.user.list()
 ```
 
 ### Meetings

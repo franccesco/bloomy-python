@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import asyncio
+from typing import TYPE_CHECKING, Any
 
+from ..models import BulkCreateError, BulkCreateResult
 from .abstract_operations import AbstractOperations
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     import httpx
 
 
@@ -65,3 +69,56 @@ class AsyncBaseOperations(AbstractOperations):
         response.raise_for_status()
         data = response.json()
         return data["Id"]
+
+    async def _process_bulk_async[T](
+        self,
+        items: list[dict[str, Any]],
+        create_func: Callable[[dict[str, Any]], Awaitable[T]],
+        required_fields: list[str],
+        max_concurrent: int = 5,
+    ) -> BulkCreateResult[T]:
+        """Process bulk creation asynchronously with concurrency control.
+
+        Args:
+            items: List of item data dictionaries.
+            create_func: Async function to create a single item from data dict.
+            required_fields: List of required field names.
+            max_concurrent: Maximum number of concurrent API requests.
+
+        Returns:
+            BulkCreateResult with successful and failed items.
+
+        """
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def create_single(
+            index: int, item_data: dict[str, Any]
+        ) -> tuple[int, T | BulkCreateError]:
+            async with semaphore:
+                try:
+                    self._validate_bulk_item(item_data, required_fields)
+                    created = await create_func(item_data)
+                    return (index, created)
+                except Exception as e:
+                    error = BulkCreateError(
+                        index=index, input_data=item_data, error=str(e)
+                    )
+                    return (index, error)
+
+        tasks = [
+            create_single(index, item_data) for index, item_data in enumerate(items)
+        ]
+        results = await asyncio.gather(*tasks)
+        results_list = list(results)
+        results_list.sort(key=lambda x: x[0])
+
+        successful: list[T] = []
+        failed: list[BulkCreateError] = []
+
+        for _, result in results_list:
+            if isinstance(result, BulkCreateError):
+                failed.append(result)
+            else:
+                successful.append(result)
+
+        return BulkCreateResult(successful=successful, failed=failed)

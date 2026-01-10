@@ -83,14 +83,20 @@ class TestAsyncTodoOperationsExtra:
         self, async_client: AsyncClient, mock_async_client: AsyncMock
     ) -> None:
         """Test that update raises error on failure."""
+        from httpx import HTTPStatusError, Request, Response
+
         mock_response = MagicMock()
         mock_response.status_code = 400
-        mock_response.raise_for_status = MagicMock()
+        mock_response.raise_for_status.side_effect = HTTPStatusError(
+            "Bad Request",
+            request=MagicMock(spec=Request),
+            response=MagicMock(spec=Response, status_code=400),
+        )
 
         mock_async_client.put.return_value = mock_response
 
-        # Call the method and expect error
-        with pytest.raises(RuntimeError, match="Failed to update todo"):
+        # Call the method and expect HTTPStatusError from raise_for_status()
+        with pytest.raises(HTTPStatusError):
             await async_client.todo.update(
                 todo_id=1,
                 title="Updated Task",

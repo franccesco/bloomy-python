@@ -17,9 +17,10 @@ from ..models import (
     Todo,
 )
 from ..utils.base_operations import BaseOperations
+from .mixins.meetings_transform import MeetingOperationsMixin
 
 
-class MeetingOperations(BaseOperations):
+class MeetingOperations(BaseOperations, MeetingOperationsMixin):
     """Class to handle all operations related to meetings.
 
     Note:
@@ -74,14 +75,7 @@ class MeetingOperations(BaseOperations):
         response.raise_for_status()
         data: Any = response.json()
 
-        return [
-            MeetingAttendee(
-                UserId=attendee["Id"],
-                Name=attendee["Name"],
-                ImageUrl=attendee.get("ImageUrl", ""),
-            )
-            for attendee in data
-        ]
+        return self._transform_attendees(data)
 
     def issues(
         self, meeting_id: int, include_closed: bool = False
@@ -110,22 +104,7 @@ class MeetingOperations(BaseOperations):
         response.raise_for_status()
         data: Any = response.json()
 
-        return [
-            Issue(
-                Id=issue["Id"],
-                Name=issue["Name"],
-                DetailsUrl=issue["DetailsUrl"],
-                CreateDate=issue["CreateTime"],
-                ClosedDate=issue["CloseTime"],
-                CompletionDate=issue.get("CompleteTime"),
-                OwnerId=issue.get("Owner", {}).get("Id", 0),
-                OwnerName=issue.get("Owner", {}).get("Name", ""),
-                OwnerImageUrl=issue.get("Owner", {}).get("ImageUrl", ""),
-                MeetingId=meeting_id,
-                MeetingName=issue["Origin"],
-            )
-            for issue in data
-        ]
+        return self._transform_meeting_issues(data, meeting_id)
 
     def todos(
         self, meeting_id: int, include_closed: bool = False
@@ -176,45 +155,7 @@ class MeetingOperations(BaseOperations):
         response.raise_for_status()
         raw_data = response.json()
 
-        if not isinstance(raw_data, list):
-            return []
-
-        metrics: list[ScorecardMetric] = []
-        # Type the list explicitly
-        data_list: list[Any] = raw_data  # type: ignore[assignment]
-        for item in data_list:
-            if not isinstance(item, dict):
-                continue
-
-            # Cast to Any dict to satisfy type checker
-            item_dict: dict[str, Any] = item  # type: ignore[assignment]
-            measurable_id = item_dict.get("Id")
-            measurable_name = item_dict.get("Name")
-
-            if not measurable_id or not measurable_name:
-                continue
-
-            owner_data = item_dict.get("Owner", {})
-            if not isinstance(owner_data, dict):
-                owner_data = {}
-            owner_dict: dict[str, Any] = owner_data  # type: ignore[assignment]
-
-            metrics.append(
-                ScorecardMetric(
-                    Id=int(measurable_id),
-                    Title=str(measurable_name).strip(),
-                    Target=float(item_dict.get("Target", 0)),
-                    Unit=str(item_dict.get("Modifiers", "")),
-                    WeekNumber=0,  # Not provided in this endpoint
-                    Value=None,
-                    MetricType=str(item_dict.get("Direction", "")),
-                    AccountableUserId=int(owner_dict.get("Id") or 0),
-                    AccountableUserName=str(owner_dict.get("Name") or ""),
-                    IsInverse=False,
-                )
-            )
-
-        return metrics
+        return self._transform_metrics(raw_data)
 
     def details(self, meeting_id: int, include_closed: bool = False) -> MeetingDetails:
         """Retrieve details of a specific meeting.
@@ -338,9 +279,6 @@ class MeetingOperations(BaseOperations):
                 - successful: List of dicts with meeting_id, title, and attendees
                 - failed: List of BulkCreateError instances for failed creations
 
-        Raises:
-            ValueError: When required parameters are missing in meeting data
-
         Example:
             ```python
             result = client.meeting.create_many([
@@ -354,32 +292,17 @@ class MeetingOperations(BaseOperations):
             ```
 
         """
-        successful: builtins.list[dict[str, Any]] = []
-        failed: builtins.list[BulkCreateError] = []
 
-        for index, meeting_data in enumerate(meetings):
-            try:
-                # Extract parameters from the meeting data
-                title = meeting_data.get("title")
-                add_self = meeting_data.get("add_self", True)
-                attendees = meeting_data.get("attendees")
+        def _create_single(data: dict[str, Any]) -> dict[str, Any]:
+            return self.create(
+                title=data["title"],
+                add_self=data.get("add_self", True),
+                attendees=data.get("attendees"),
+            )
 
-                # Validate required parameters
-                if title is None:
-                    raise ValueError("title is required")
-
-                # Create the meeting
-                created_meeting = self.create(
-                    title=title, add_self=add_self, attendees=attendees
-                )
-                successful.append(created_meeting)
-
-            except Exception as e:
-                failed.append(
-                    BulkCreateError(index=index, input_data=meeting_data, error=str(e))
-                )
-
-        return BulkCreateResult(successful=successful, failed=failed)
+        return self._process_bulk_sync(
+            meetings, _create_single, required_fields=["title"]
+        )
 
     def get_many(self, meeting_ids: list[int]) -> BulkCreateResult[MeetingDetails]:
         """Retrieve details for multiple meetings in a best-effort manner.

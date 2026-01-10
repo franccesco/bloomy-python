@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-01-09
+
+### Changed
+
+- **BREAKING**: `HeadlineListItem` model removed and merged into `HeadlineDetails` (now a type alias for backward compatibility)
+- Refactored internal operations structure to use mixins for better code organization
+- Improved bulk operations with generic validation and processing helpers in base classes
+- Standardized error handling across all operations to consistently use `raise_for_status()`
+
+### Added
+
+- New `mixins/` folder with transform mixins for each operation type (goals, meetings, issues, headlines, todos, users)
+- Generic bulk operation helpers in `AbstractOperations` base class (`_validate_bulk_item`, `_process_bulk_sync`)
+- Generic async bulk processing in `AsyncBaseOperations` with configurable semaphore for concurrency control
+- Reusable `OptionalDatetime` and `OptionalFloat` annotated types using Pydantic's `BeforeValidator`
+
+### Fixed
+
+- Removed duplicate datetime and float validators across models (Todo, Issue, Goal)
+- Removed redundant `__init__` methods from async operations
+
 ## [0.20.1] - 2025-12-10
 
 ### Fixed
@@ -231,7 +252,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration management with multiple API key sources
 - httpx-based HTTP client with bearer token authentication
 
-[Unreleased]: https://github.com/franccesco/bloomy-python/compare/v0.20.1...HEAD
+[Unreleased]: https://github.com/franccesco/bloomy-python/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/franccesco/bloomy-python/compare/v0.20.1...v0.21.0
 [0.20.1]: https://github.com/franccesco/bloomy-python/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/franccesco/bloomy-python/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/franccesco/bloomy-python/compare/v0.18.0...v0.19.0
