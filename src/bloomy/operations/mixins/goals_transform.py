@@ -37,9 +37,15 @@ class GoalOperationsMixin:
                 created_at=goal["CreateTime"],
                 due_date=goal["DueDate"],
                 status="Completed" if goal.get("Complete") else "Incomplete",
-                meeting_id=goal["Origins"][0]["Id"] if goal.get("Origins") else None,
+                meeting_id=(
+                    goal["Origins"][0]["Id"]
+                    if goal.get("Origins") and goal["Origins"][0]
+                    else None
+                ),
                 meeting_title=(
-                    goal["Origins"][0]["Name"] if goal.get("Origins") else None
+                    goal["Origins"][0]["Name"]
+                    if goal.get("Origins") and goal["Origins"][0]
+                    else None
                 ),
             )
             for goal in data
@@ -93,14 +99,18 @@ class GoalOperationsMixin:
             user_name=data["Owner"]["Name"],
             title=title,
             meeting_id=meeting_id,
-            meeting_title=data["Origins"][0]["Name"],
+            meeting_title=(
+                data["Origins"][0]["Name"]
+                if data.get("Origins") and data["Origins"][0]
+                else None
+            ),
             status=status,
             created_at=data["CreateTime"],
         )
 
     def _build_goal_update_payload(
         self,
-        accountable_user: int,
+        accountable_user: int | None = None,
         title: str | None = None,
         status: GoalStatus | str | None = None,
     ) -> dict[str, Any]:
@@ -108,6 +118,7 @@ class GoalOperationsMixin:
 
         Args:
             accountable_user: The ID of the user responsible for the goal.
+                Only included in the payload when explicitly provided.
             title: The new title of the goal.
             status: The status value (GoalStatus enum or string).
 
@@ -118,7 +129,10 @@ class GoalOperationsMixin:
             ValueError: If an invalid status value is provided.
 
         """
-        payload: dict[str, Any] = {"accountableUserId": accountable_user}
+        payload: dict[str, Any] = {}
+
+        if accountable_user is not None:
+            payload["accountableUserId"] = accountable_user
 
         if title is not None:
             payload["title"] = title
