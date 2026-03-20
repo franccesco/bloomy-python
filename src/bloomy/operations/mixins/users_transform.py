@@ -130,7 +130,7 @@ class UserOperationsMixin:
             user
             for user in users
             if user["ResultType"] == "User"
-            and (include_placeholders or user["ImageUrl"] != "/i/userplaceholder")
+            and (include_placeholders or user.get("Email", "") != "")
         ]
 
         return [

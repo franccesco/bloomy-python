@@ -88,10 +88,10 @@ class UserSearchResult(BloomyBaseModel):
 
     id: int
     name: str
-    description: str
+    description: str | None = None
     email: str
     organization_id: int
-    image_url: str
+    image_url: str | None = None
 
 
 class UserListItem(BloomyBaseModel):
@@ -100,8 +100,8 @@ class UserListItem(BloomyBaseModel):
     id: int
     name: str
     email: str
-    position: str
-    image_url: str
+    position: str | None = None
+    image_url: str | None = None
 
 
 class MeetingAttendee(BloomyBaseModel):
@@ -265,7 +265,7 @@ class CreatedGoalInfo(BloomyBaseModel):
     user_name: str
     title: str
     meeting_id: int
-    meeting_title: str
+    meeting_title: str | None = None
     status: str
     created_at: str
 

@@ -32,7 +32,10 @@ class Configuration:
             ```
 
         """
-        self.api_key = api_key or os.environ.get("BG_API_KEY") or self._load_api_key()
+        stripped_key = api_key.strip() if api_key else api_key
+        self.api_key = (
+            stripped_key or os.environ.get("BG_API_KEY") or self._load_api_key()
+        )
 
     def configure_api_key(
         self, username: str, password: str, store_key: bool = False

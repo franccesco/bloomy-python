@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import builtins
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from ...models import BulkCreateResult, Todo
@@ -120,7 +120,7 @@ class AsyncTodoOperations(AsyncBaseOperations, TodoOperationsMixin):
             "DetailsUrl": data.get("DetailsUrl"),
             "DueDate": data.get("DueDate"),
             "CompleteTime": None,
-            "CreateTime": data.get("CreateTime", datetime.now().isoformat()),
+            "CreateTime": data.get("CreateTime", datetime.now(UTC).isoformat()),
             "OriginId": meeting_id,
             "Origin": None,
             "Complete": False,
