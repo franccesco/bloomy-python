@@ -109,16 +109,27 @@ class TestGoalOperations:
         assert result is None
         mock_http_client.delete.assert_called_once_with("rocks/101")
 
-    def test_update_goal(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
+    def test_update_goal(
+        self,
+        mock_http_client: Mock,
+        mock_user_id: Mock,
+        sample_goal_data: dict[str, Any],
+    ) -> None:
         """Test updating a goal."""
-        mock_response = Mock()
-        mock_http_client.put.return_value = mock_response
+        mock_put_response = Mock()
+        mock_http_client.put.return_value = mock_put_response
+
+        mock_get_response = Mock()
+        mock_get_response.json.return_value = sample_goal_data
+        mock_http_client.get.return_value = mock_get_response
 
         goal_ops = GoalOperations(mock_http_client)
 
+        from bloomy.models import GoalInfo
+
         result = goal_ops.update(goal_id=101, title="Updated Goal", status="complete")
 
-        assert result is None
+        assert isinstance(result, GoalInfo)
         mock_http_client.put.assert_called_once_with(
             "rocks/101",
             json={

@@ -51,6 +51,36 @@ class GoalOperationsMixin:
             for goal in data
         ]
 
+    def _transform_goal_details(self, data: dict[str, Any]) -> GoalInfo:
+        """Transform a single goal API response to a GoalInfo model.
+
+        Args:
+            data: The raw API response data for a single goal.
+
+        Returns:
+            A GoalInfo model.
+
+        """
+        return GoalInfo(
+            id=data["Id"],
+            user_id=data["Owner"]["Id"],
+            user_name=data["Owner"]["Name"],
+            title=data["Name"],
+            created_at=data["CreateTime"],
+            due_date=data["DueDate"],
+            status="Completed" if data.get("Complete") else "Incomplete",
+            meeting_id=(
+                data["Origins"][0]["Id"]
+                if data.get("Origins") and data["Origins"][0]
+                else None
+            ),
+            meeting_title=(
+                data["Origins"][0]["Name"]
+                if data.get("Origins") and data["Origins"][0]
+                else None
+            ),
+        )
+
     def _transform_archived_goals(
         self, data: Sequence[dict[str, Any]]
     ) -> list[ArchivedGoalInfo]:

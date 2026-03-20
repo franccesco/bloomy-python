@@ -68,6 +68,22 @@ class TestGoalUpdateOverwritesOwner:
     overwriting the goal owner. This has been fixed.
     """
 
+    @pytest.fixture(autouse=True)
+    def _setup_goal_get_response(self, mock_http_client: Mock) -> None:
+        """Configure GET to return a valid goal response for the details() re-fetch."""
+        get_response = Mock()
+        get_response.raise_for_status = Mock()
+        get_response.json.return_value = {
+            "Id": 1,
+            "Owner": {"Id": 123, "Name": "Alice"},
+            "Name": "Goal Title",
+            "CreateTime": "2024-01-01T00:00:00Z",
+            "DueDate": "2024-12-31",
+            "Complete": False,
+            "Origins": [{"Id": 100, "Name": "Meeting A"}],
+        }
+        mock_http_client.get.return_value = get_response
+
     def test_update_title_only_should_not_overwrite_owner(
         self, mock_http_client: Mock, mock_user_id: PropertyMock
     ) -> None:

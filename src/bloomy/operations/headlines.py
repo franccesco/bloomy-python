@@ -55,17 +55,22 @@ class HeadlineOperations(BaseOperations, HeadlineOperationsMixin):
             notes_url=data.get("DetailsUrl") or "",
         )
 
-    def update(self, headline_id: int, title: str) -> None:
+    def update(self, headline_id: int, title: str) -> HeadlineDetails:
         """Update a headline.
 
         Args:
             headline_id: The ID of the headline to update
             title: The new title of the headline
 
+        Returns:
+            A HeadlineDetails model instance containing the updated headline
+
         """
         payload = {"title": title}
         response = self._client.put(f"headline/{headline_id}", json=payload)
         response.raise_for_status()
+
+        return self.details(headline_id)
 
     def details(self, headline_id: int) -> HeadlineDetails:
         """Get headline details.

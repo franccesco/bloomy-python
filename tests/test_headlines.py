@@ -69,16 +69,24 @@ class TestHeadlineOperations:
             json={"title": "Product launch successful", "ownerId": 123},
         )
 
-    def test_update(self, mock_http_client: Mock) -> None:
+    def test_update(
+        self, mock_http_client: Mock, sample_headline_data: dict[str, Any]
+    ) -> None:
         """Test updating a headline."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"Id": 501, "Name": "Updated headline"}
-        mock_http_client.put.return_value = mock_response
+        mock_put_response = Mock()
+        mock_http_client.put.return_value = mock_put_response
+
+        mock_get_response = Mock()
+        mock_get_response.json.return_value = sample_headline_data
+        mock_http_client.get.return_value = mock_get_response
 
         headline_ops = HeadlineOperations(mock_http_client)
         result = headline_ops.update(headline_id=501, title="Updated headline")
 
-        assert result is None
+        from bloomy.models import HeadlineDetails
+
+        assert isinstance(result, HeadlineDetails)
+        assert result.id == 501
 
         mock_http_client.put.assert_called_once_with(
             "headline/501", json={"title": "Updated headline"}

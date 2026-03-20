@@ -86,15 +86,31 @@ class TestAsyncHeadlineOperations:
         self, async_client: AsyncClient, mock_async_client: AsyncMock
     ):
         """Test updating a headline."""
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_async_client.put.return_value = mock_response
+        mock_put_response = MagicMock()
+        mock_put_response.raise_for_status = MagicMock()
+        mock_async_client.put.return_value = mock_put_response
+
+        mock_get_response = MagicMock()
+        mock_get_response.raise_for_status = MagicMock()
+        mock_get_response.json.return_value = {
+            "Id": 501,
+            "Name": "Updated headline",
+            "DetailsUrl": "https://example.com/headline/501",
+            "Owner": {"Id": 123, "Name": "John Doe"},
+            "Origin": "Product Meeting",
+            "OriginId": 456,
+            "Archived": False,
+            "CreateTime": "2024-06-01T10:00:00Z",
+            "CloseTime": None,
+        }
+        mock_async_client.get.return_value = mock_get_response
 
         result = await async_client.headline.update(
             headline_id=501, title="Updated headline"
         )
 
-        assert result is None
+        assert isinstance(result, HeadlineDetails)
+        assert result.id == 501
         mock_async_client.put.assert_called_once_with(
             "headline/501", json={"title": "Updated headline"}
         )

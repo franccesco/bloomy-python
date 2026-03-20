@@ -91,13 +91,31 @@ class AsyncGoalOperations(AsyncBaseOperations, GoalOperationsMixin):
         response = await self._client.delete(f"rocks/{goal_id}")
         response.raise_for_status()
 
+    async def details(self, goal_id: int) -> GoalInfo:
+        """Get details for a specific goal.
+
+        Args:
+            goal_id: The ID of the goal
+
+        Returns:
+            A GoalInfo model instance containing the goal details
+
+        """
+        response = await self._client.get(
+            f"rocks/{goal_id}", params={"include_origin": True}
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        return self._transform_goal_details(data)
+
     async def update(
         self,
         goal_id: int,
         title: str | None = None,
         accountable_user: int | None = None,
         status: GoalStatus | str | None = None,
-    ) -> None:
+    ) -> GoalInfo:
         """Update a goal.
 
         Args:
@@ -110,11 +128,16 @@ class AsyncGoalOperations(AsyncBaseOperations, GoalOperationsMixin):
                 GoalStatus.AT_RISK, or GoalStatus.COMPLETE for type safety.
                 Invalid values will raise ValueError via the update payload builder.
 
+        Returns:
+            A GoalInfo model instance containing the updated goal details
+
         """
         payload = self._build_goal_update_payload(accountable_user, title, status)
 
         response = await self._client.put(f"rocks/{goal_id}", json=payload)
         response.raise_for_status()
+
+        return await self.details(goal_id)
 
     async def archive(self, goal_id: int) -> None:
         """Archive a rock with the specified goal ID.
