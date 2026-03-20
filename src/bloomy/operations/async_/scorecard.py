@@ -51,12 +51,12 @@ class AsyncScorecardOperations(AsyncBaseOperations):
             ValueError: If both user_id and meeting_id are provided
 
         """
-        if user_id and meeting_id:
+        if user_id is not None and meeting_id is not None:
             raise ValueError(
                 "Please provide either `user_id` or `meeting_id`, not both."
             )
 
-        if meeting_id:
+        if meeting_id is not None:
             response = await self._client.get(f"scorecard/meeting/{meeting_id}")
         else:
             if user_id is None:
