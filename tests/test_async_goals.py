@@ -202,7 +202,6 @@ class TestAsyncGoalOperations:
         mock_async_client.put.assert_called_once_with(
             "rocks/123",
             json={
-                "accountableUserId": 1,
                 "title": "Updated Goal",
                 "completion": "OnTrack",
             },
