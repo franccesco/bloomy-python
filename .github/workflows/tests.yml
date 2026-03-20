@@ -39,7 +39,7 @@ jobs:
         run: uv sync --all-extras
 
       - name: Run tests with coverage
-        run: uv run pytest --cov=bloomy --cov-report=term-missing --cov-report=xml
+        run: uv run pytest -m "not integration" --cov=bloomy --cov-report=term-missing --cov-report=xml
 
       - name: Upload coverage report
         if: matrix.python-version == '3.12'

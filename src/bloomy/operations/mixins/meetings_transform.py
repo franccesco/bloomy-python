@@ -101,19 +101,22 @@ class MeetingOperationsMixin:
             A list of Issue models.
 
         """
-        return [
-            Issue(
-                Id=issue["Id"],
-                Name=issue["Name"],
-                DetailsUrl=issue["DetailsUrl"],
-                CreateDate=issue["CreateTime"],
-                ClosedDate=issue["CloseTime"],
-                CompletionDate=issue.get("CompleteTime"),
-                OwnerId=(issue.get("Owner") or {}).get("Id", 0),
-                OwnerName=(issue.get("Owner") or {}).get("Name", ""),
-                OwnerImageUrl=(issue.get("Owner") or {}).get("ImageUrl", ""),
-                MeetingId=meeting_id,
-                MeetingName=issue["Origin"],
+        issues: list[Issue] = []
+        for issue in data:
+            owner: dict[str, Any] = issue.get("Owner") or {}
+            issues.append(
+                Issue(
+                    Id=issue["Id"],
+                    Name=issue["Name"],
+                    DetailsUrl=issue["DetailsUrl"],
+                    CreateDate=issue["CreateTime"],
+                    ClosedDate=issue["CloseTime"],
+                    CompletionDate=issue.get("CompleteTime"),
+                    OwnerId=owner.get("Id", 0),
+                    OwnerName=owner.get("Name", ""),
+                    OwnerImageUrl=owner.get("ImageUrl", ""),
+                    MeetingId=meeting_id,
+                    MeetingName=issue["Origin"],
+                )
             )
-            for issue in data
-        ]
+        return issues
