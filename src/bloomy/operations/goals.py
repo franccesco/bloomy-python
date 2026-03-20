@@ -124,13 +124,35 @@ class GoalOperations(BaseOperations, GoalOperationsMixin):
         response = self._client.delete(f"rocks/{goal_id}")
         response.raise_for_status()
 
+    def details(self, goal_id: int) -> GoalInfo:
+        """Get details for a specific goal.
+
+        Args:
+            goal_id: The ID of the goal
+
+        Returns:
+            A GoalInfo model instance containing the goal details
+
+        Example:
+            ```python
+            client.goal.details(1)
+            # Returns: GoalInfo(id=1, title='Complete project', ...)
+            ```
+
+        """
+        response = self._client.get(f"rocks/{goal_id}", params={"include_origin": True})
+        response.raise_for_status()
+        data = response.json()
+
+        return self._transform_goal_details(data)
+
     def update(
         self,
         goal_id: int,
         title: str | None = None,
         accountable_user: int | None = None,
         status: GoalStatus | str | None = None,
-    ) -> None:
+    ) -> GoalInfo:
         """Update a goal.
 
         Args:
@@ -142,6 +164,9 @@ class GoalOperations(BaseOperations, GoalOperationsMixin):
                 ('on', 'off', or 'complete'). Use GoalStatus.ON_TRACK,
                 GoalStatus.AT_RISK, or GoalStatus.COMPLETE for type safety.
                 Invalid values will raise ValueError via the update payload builder.
+
+        Returns:
+            A GoalInfo model instance containing the updated goal details
 
         Example:
             ```python
@@ -159,6 +184,8 @@ class GoalOperations(BaseOperations, GoalOperationsMixin):
 
         response = self._client.put(f"rocks/{goal_id}", json=payload)
         response.raise_for_status()
+
+        return self.details(goal_id)
 
     def archive(self, goal_id: int) -> None:
         """Archive a rock with the specified goal ID.
