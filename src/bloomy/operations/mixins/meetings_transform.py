@@ -63,7 +63,7 @@ class MeetingOperationsMixin:
             measurable_id = item_dict.get("Id")
             measurable_name = item_dict.get("Name")
 
-            if not measurable_id or not measurable_name:
+            if measurable_id is None or not measurable_name:
                 continue
 
             owner_data = item_dict.get("Owner", {})
@@ -101,19 +101,22 @@ class MeetingOperationsMixin:
             A list of Issue models.
 
         """
-        return [
-            Issue(
-                Id=issue["Id"],
-                Name=issue["Name"],
-                DetailsUrl=issue["DetailsUrl"],
-                CreateDate=issue["CreateTime"],
-                ClosedDate=issue["CloseTime"],
-                CompletionDate=issue.get("CompleteTime"),
-                OwnerId=issue.get("Owner", {}).get("Id", 0),
-                OwnerName=issue.get("Owner", {}).get("Name", ""),
-                OwnerImageUrl=issue.get("Owner", {}).get("ImageUrl", ""),
-                MeetingId=meeting_id,
-                MeetingName=issue["Origin"],
+        issues: list[Issue] = []
+        for issue in data:
+            owner: dict[str, Any] = issue.get("Owner") or {}
+            issues.append(
+                Issue(
+                    Id=issue["Id"],
+                    Name=issue["Name"],
+                    DetailsUrl=issue["DetailsUrl"],
+                    CreateDate=issue["CreateTime"],
+                    ClosedDate=issue["CloseTime"],
+                    CompletionDate=issue.get("CompleteTime"),
+                    OwnerId=owner.get("Id", 0),
+                    OwnerName=owner.get("Name", ""),
+                    OwnerImageUrl=owner.get("ImageUrl", ""),
+                    MeetingId=meeting_id,
+                    MeetingName=issue["Origin"],
+                )
             )
-            for issue in data
-        ]
+        return issues

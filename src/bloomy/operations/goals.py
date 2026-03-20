@@ -136,8 +136,8 @@ class GoalOperations(BaseOperations, GoalOperationsMixin):
         Args:
             goal_id: The ID of the goal to update
             title: The new title of the goal
-            accountable_user: The ID of the user responsible for the goal
-                (default: initialized user ID)
+            accountable_user: The ID of the user responsible for the goal.
+                If not provided, the existing owner is preserved.
             status: The status value. Can be a GoalStatus enum member or string
                 ('on', 'off', or 'complete'). Use GoalStatus.ON_TRACK,
                 GoalStatus.AT_RISK, or GoalStatus.COMPLETE for type safety.
@@ -155,9 +155,6 @@ class GoalOperations(BaseOperations, GoalOperationsMixin):
             ```
 
         """
-        if accountable_user is None:
-            accountable_user = self.user_id
-
         payload = self._build_goal_update_payload(accountable_user, title, status)
 
         response = self._client.put(f"rocks/{goal_id}", json=payload)

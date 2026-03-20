@@ -336,48 +336,35 @@ class TestBulkMeetingOperations:
         self, mock_http_client: Mock, mock_user_id: Mock
     ) -> None:
         """Test retrieving multiple meetings when all succeed."""
-        # Mock list response for finding meetings
-        list_response = Mock()
-        list_response.json.return_value = [
-            {"Id": 456, "Type": "NameId", "Key": "NameId_456", "Name": "Meeting 1"},
-            {"Id": 457, "Type": "NameId", "Key": "NameId_457", "Name": "Meeting 2"},
-            {"Id": 458, "Type": "NameId", "Key": "NameId_458", "Name": "Meeting 3"},
-        ]
 
-        # Mock responses for each meeting's details
-        attendees_response = Mock()
-        attendees_response.json.return_value = [
-            {"Id": 123, "Name": "John Doe", "ImageUrl": "https://example.com/john.jpg"}
-        ]
+        # Mock direct endpoint responses and sub-resource responses
+        def get_side_effect(url, **_kwargs):
+            mock_response = Mock()
+            if "/attendees" in url:
+                mock_response.json.return_value = [
+                    {
+                        "Id": 123,
+                        "Name": "John Doe",
+                        "ImageUrl": "https://example.com/john.jpg",
+                    }
+                ]
+            elif "/issues" in url or "/todos" in url or "/measurables" in url:
+                mock_response.json.return_value = []
+            else:
+                # Direct L10/{id} endpoint
+                meeting_id = int(url.split("/")[1])
+                names = {456: "Meeting 1", 457: "Meeting 2", 458: "Meeting 3"}
+                mock_response.json.return_value = {
+                    "Id": meeting_id,
+                    "Basics": {"Name": names[meeting_id]},
+                    "CreateTime": None,
+                    "StartDateUtc": None,
+                    "OrganizationId": None,
+                }
+            mock_response.raise_for_status = Mock()
+            return mock_response
 
-        issues_response = Mock()
-        issues_response.json.return_value = []
-
-        todos_response = Mock()
-        todos_response.json.return_value = []
-
-        metrics_response = Mock()
-        metrics_response.json.return_value = []
-
-        # Set up the side effect for all calls
-        # Pattern: list, attendees, issues, todos, metrics (repeated for each meeting)
-        mock_http_client.get.side_effect = [
-            list_response,  # For finding meeting 456
-            attendees_response,
-            issues_response,
-            todos_response,
-            metrics_response,
-            list_response,  # For finding meeting 457
-            attendees_response,
-            issues_response,
-            todos_response,
-            metrics_response,
-            list_response,  # For finding meeting 458
-            attendees_response,
-            issues_response,
-            todos_response,
-            metrics_response,
-        ]
+        mock_http_client.get.side_effect = get_side_effect
 
         meeting_ops = MeetingOperations(mock_http_client)
 
@@ -402,42 +389,36 @@ class TestBulkMeetingOperations:
         self, mock_http_client: Mock, mock_user_id: Mock
     ) -> None:
         """Test retrieving multiple meetings with some failures."""
-        # Mock list response for finding meetings
-        list_response = Mock()
-        list_response.json.return_value = [
-            {"Id": 456, "Type": "NameId", "Key": "NameId_456", "Name": "Meeting 1"},
-        ]
 
-        empty_list_response = Mock()
-        empty_list_response.json.return_value = []  # Meeting not found
+        # Mock direct endpoint that raises for meeting 999
+        def get_side_effect(url, **_kwargs):
+            mock_response = Mock()
+            if url == "L10/999":
+                mock_response.raise_for_status.side_effect = HTTPStatusError(
+                    "Not Found",
+                    request=Request("GET", "L10/999"),
+                    response=Response(404),
+                )
+                return mock_response
+            elif (
+                "/attendees" in url
+                or "/issues" in url
+                or "/todos" in url
+                or "/measurables" in url
+            ):
+                mock_response.json.return_value = []
+            else:
+                mock_response.json.return_value = {
+                    "Id": 456,
+                    "Basics": {"Name": "Meeting 1"},
+                    "CreateTime": None,
+                    "StartDateUtc": None,
+                    "OrganizationId": None,
+                }
+            mock_response.raise_for_status = Mock()
+            return mock_response
 
-        # Mock responses for meeting details
-        attendees_response = Mock()
-        attendees_response.json.return_value = []
-
-        issues_response = Mock()
-        issues_response.json.return_value = []
-
-        todos_response = Mock()
-        todos_response.json.return_value = []
-
-        metrics_response = Mock()
-        metrics_response.json.return_value = []
-
-        # Set up the side effect
-        mock_http_client.get.side_effect = [
-            list_response,  # First meeting found
-            attendees_response,
-            issues_response,
-            todos_response,
-            metrics_response,
-            empty_list_response,  # Second meeting not found
-            list_response,  # Third meeting found
-            attendees_response,
-            issues_response,
-            todos_response,
-            metrics_response,
-        ]
+        mock_http_client.get.side_effect = get_side_effect
 
         meeting_ops = MeetingOperations(mock_http_client)
 
@@ -449,7 +430,6 @@ class TestBulkMeetingOperations:
         # Check failure details
         assert result.failed[0].index == 1
         assert result.failed[0].input_data == {"meeting_id": 999}
-        assert "Meeting with ID 999 not found" in result.failed[0].error
 
     def test_get_many_empty_list(
         self, mock_http_client: Mock, mock_user_id: Mock
@@ -467,33 +447,33 @@ class TestBulkMeetingOperations:
         self, mock_http_client: Mock, mock_user_id: Mock
     ) -> None:
         """Test retrieving meetings with network errors."""
-        # First meeting succeeds
-        list_response = Mock()
-        list_response.json.return_value = [
-            {"Id": 456, "Type": "NameId", "Key": "NameId_456", "Name": "Meeting 1"},
-        ]
+        call_count = 0
 
-        attendees_response = Mock()
-        attendees_response.json.return_value = []
+        def get_side_effect(_url, **_kwargs):
+            nonlocal call_count
+            call_count += 1
+            mock_response = Mock()
 
-        issues_response = Mock()
-        issues_response.json.return_value = []
+            # First 5 calls are for meeting 456 (direct + 4 sub-resources)
+            if call_count <= 5:
+                if call_count == 1:
+                    # Direct L10/{id} endpoint
+                    mock_response.json.return_value = {
+                        "Id": 456,
+                        "Basics": {"Name": "Meeting 1"},
+                        "CreateTime": None,
+                        "StartDateUtc": None,
+                        "OrganizationId": None,
+                    }
+                else:
+                    mock_response.json.return_value = []
+                mock_response.raise_for_status = Mock()
+                return mock_response
+            else:
+                # Network error on second meeting's direct endpoint
+                raise Exception("Network error")
 
-        todos_response = Mock()
-        todos_response.json.return_value = []
-
-        metrics_response = Mock()
-        metrics_response.json.return_value = []
-
-        # Set up side effect with network error on second meeting
-        mock_http_client.get.side_effect = [
-            list_response,  # First meeting list
-            attendees_response,
-            issues_response,
-            todos_response,
-            metrics_response,
-            Exception("Network error"),  # Network error on second meeting list
-        ]
+        mock_http_client.get.side_effect = get_side_effect
 
         meeting_ops = MeetingOperations(mock_http_client)
 
@@ -509,38 +489,28 @@ class TestBulkMeetingOperations:
         self, mock_http_client: Mock, mock_user_id: Mock
     ) -> None:
         """Test retrieving meetings with duplicate IDs."""
-        # Mock list response
-        list_response = Mock()
-        list_response.json.return_value = [
-            {"Id": 456, "Type": "NameId", "Key": "NameId_456", "Name": "Meeting 1"},
-        ]
 
-        # Mock responses for meeting details
-        attendees_response = Mock()
-        attendees_response.json.return_value = []
+        def get_side_effect(url, **_kwargs):
+            mock_response = Mock()
+            if (
+                "/attendees" in url
+                or "/issues" in url
+                or "/todos" in url
+                or "/measurables" in url
+            ):
+                mock_response.json.return_value = []
+            else:
+                mock_response.json.return_value = {
+                    "Id": 456,
+                    "Basics": {"Name": "Meeting 1"},
+                    "CreateTime": None,
+                    "StartDateUtc": None,
+                    "OrganizationId": None,
+                }
+            mock_response.raise_for_status = Mock()
+            return mock_response
 
-        issues_response = Mock()
-        issues_response.json.return_value = []
-
-        todos_response = Mock()
-        todos_response.json.return_value = []
-
-        metrics_response = Mock()
-        metrics_response.json.return_value = []
-
-        # Set up the side effect (need responses for two calls to same meeting)
-        mock_http_client.get.side_effect = [
-            list_response,  # First call for meeting 456
-            attendees_response,
-            issues_response,
-            todos_response,
-            metrics_response,
-            list_response,  # Second call for meeting 456
-            attendees_response,
-            issues_response,
-            todos_response,
-            metrics_response,
-        ]
+        mock_http_client.get.side_effect = get_side_effect
 
         meeting_ops = MeetingOperations(mock_http_client)
 

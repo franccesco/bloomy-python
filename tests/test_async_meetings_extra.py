@@ -6,7 +6,6 @@ import pytest
 import pytest_asyncio
 
 from bloomy import AsyncClient
-from bloomy.exceptions import APIError
 from bloomy.models import Issue, Todo
 
 
@@ -192,27 +191,18 @@ class TestAsyncMeetingOperationsExtra:
     async def test_details_meeting_not_found(
         self, async_client: AsyncClient, mock_async_client: AsyncMock
     ) -> None:
-        """Test details when meeting is not found."""
-        # Mock user response
-        mock_user_response = MagicMock()
-        mock_user_response.json.return_value = {"Id": 456}
-        mock_user_response.raise_for_status = MagicMock()
+        """Test details when meeting is not found (404 from direct endpoint)."""
+        from httpx import HTTPStatusError, Request, Response
 
-        # Mock empty meetings list
-        mock_meetings_response = MagicMock()
-        mock_meetings_response.json.return_value = []
-        mock_meetings_response.raise_for_status = MagicMock()
+        # Mock the direct L10/{id} endpoint to return 404
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = HTTPStatusError(
+            "Not Found",
+            request=Request("GET", "L10/999"),
+            response=Response(404),
+        )
+        mock_async_client.get.return_value = mock_response
 
-        def get_side_effect(url: str) -> MagicMock:
-            if url == "users/mine":
-                return mock_user_response
-            elif url == "L10/456/list":
-                return mock_meetings_response
-            else:
-                raise ValueError(f"Unexpected URL: {url}")
-
-        mock_async_client.get.side_effect = get_side_effect
-
-        # Call the method and expect error
-        with pytest.raises(APIError, match="Meeting with ID 999 not found"):
+        # Call the method and expect HTTP error
+        with pytest.raises(HTTPStatusError):
             await async_client.meeting.details(999)

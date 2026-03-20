@@ -3,8 +3,6 @@
 from typing import Any
 from unittest.mock import Mock
 
-import pytest
-
 from bloomy.operations.meetings import MeetingOperations
 
 
@@ -153,20 +151,19 @@ class TestMeetingOperations:
 
         assert result == []
 
-    def test_details(self, mock_http_client: Mock, mock_user_id: Mock) -> None:
-        """Test getting meeting details."""
-        # Mock list response
-        list_response = Mock()
-        list_response.json.return_value = [
-            {
-                "Id": 789,
-                "Type": "NameId",
-                "Key": "NameId_789",
-                "Name": "Team Meeting",
-            }
-        ]
+    def test_details(self, mock_http_client: Mock) -> None:
+        """Test getting meeting details via direct endpoint."""
+        # Mock direct L10/{id} response
+        direct_response = Mock()
+        direct_response.json.return_value = {
+            "Id": 789,
+            "Basics": {"Name": "Team Meeting"},
+            "CreateTime": "2024-06-01T10:00:00Z",
+            "StartDateUtc": None,
+            "OrganizationId": 42,
+        }
 
-        # Mock other responses
+        # Mock sub-resource responses
         attendees_response = Mock()
         attendees_response.json.return_value = []
 
@@ -180,7 +177,7 @@ class TestMeetingOperations:
         metrics_response.json.return_value = []
 
         mock_http_client.get.side_effect = [
-            list_response,
+            direct_response,
             attendees_response,
             issues_response,
             todos_response,
@@ -193,27 +190,14 @@ class TestMeetingOperations:
 
         assert result.id == 789
         assert result.name == "Team Meeting"
+        assert result.organization_id == 42
         assert result.attendees is not None
         assert result.issues is not None
         assert result.todos is not None
         assert result.metrics is not None
 
-    def test_details_meeting_not_found(
-        self, mock_http_client: Mock, mock_user_id: Mock
-    ) -> None:
-        """Test getting details for non-existent meeting."""
-        mock_response = Mock()
-        mock_response.json.return_value = []
-        mock_http_client.get.return_value = mock_response
-
-        meeting_ops = MeetingOperations(mock_http_client)
-
-        from bloomy.exceptions import APIError
-
-        with pytest.raises(APIError) as exc_info:
-            meeting_ops.details(meeting_id=999)
-
-        assert "Meeting with ID 999 not found" in str(exc_info.value)
+        # Verify the first call is to the direct endpoint
+        mock_http_client.get.assert_any_call("L10/789")
 
     def test_create_meeting(self, mock_http_client: Mock) -> None:
         """Test creating a meeting."""

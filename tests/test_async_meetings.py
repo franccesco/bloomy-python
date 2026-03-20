@@ -332,12 +332,30 @@ class TestAsyncMeetingOperations:
         self, async_client: AsyncClient, mock_async_client: AsyncMock
     ) -> None:
         """Test bulk retrieval where all meetings are retrieved successfully."""
-        # Mock meeting list response for details method
-        mock_meetings_list = [
-            {"Id": 100, "Type": "L10", "Key": "L10-100", "Name": "Weekly Standup"},
-            {"Id": 101, "Type": "L10", "Key": "L10-101", "Name": "Sprint Planning"},
-            {"Id": 102, "Type": "L10", "Key": "L10-102", "Name": "Retrospective"},
-        ]
+        # Mock direct L10/{id} responses and sub-resource responses
+        direct_responses = {
+            100: {
+                "Id": 100,
+                "Basics": {"Name": "Weekly Standup"},
+                "CreateTime": None,
+                "StartDateUtc": None,
+                "OrganizationId": None,
+            },
+            101: {
+                "Id": 101,
+                "Basics": {"Name": "Sprint Planning"},
+                "CreateTime": None,
+                "StartDateUtc": None,
+                "OrganizationId": None,
+            },
+            102: {
+                "Id": 102,
+                "Basics": {"Name": "Retrospective"},
+                "CreateTime": None,
+                "StartDateUtc": None,
+                "OrganizationId": None,
+            },
+        }
 
         # Mock attendees responses
         attendees_responses = {
@@ -373,17 +391,17 @@ class TestAsyncMeetingOperations:
         def get_side_effect(url, **_kwargs):
             mock_response = MagicMock()
 
-            if url.endswith("/list"):
-                mock_response.json.return_value = mock_meetings_list
-            elif "/attendees" in url:
-                # Extract meeting ID from URL
+            if "/attendees" in url:
                 meeting_id = int(url.split("/")[1])
                 mock_response.json.return_value = attendees_responses.get(
                     meeting_id, []
                 )
-            else:
-                # For issues, todos, metrics
+            elif "/issues" in url or "/todos" in url or "/measurables" in url:
                 mock_response.json.return_value = []
+            else:
+                # Direct L10/{id} endpoint
+                meeting_id = int(url.split("/")[1])
+                mock_response.json.return_value = direct_responses.get(meeting_id, {})
 
             mock_response.raise_for_status = MagicMock()
             return mock_response
@@ -409,7 +427,7 @@ class TestAsyncMeetingOperations:
         assert len(result.successful[2].attendees) == 1
 
         # Verify API calls - 5 calls per meeting
-        # (list, attendees, issues, todos, metrics)
+        # (direct, attendees, issues, todos, metrics)
         assert mock_async_client.get.call_count == 15
 
     @pytest.mark.asyncio
@@ -417,17 +435,29 @@ class TestAsyncMeetingOperations:
         self, async_client: AsyncClient, mock_async_client: AsyncMock
     ) -> None:
         """Test bulk retrieval where some meetings fail."""
-        # Mock meeting list response - contains meeting 200 but not 999 or 500
-        mock_meetings_list = [
-            {"Id": 200, "Type": "L10", "Key": "L10-200", "Name": "Success Meeting"},
-        ]
+        from httpx import HTTPStatusError, Request, Response
 
         # Create side effect function that returns appropriate response based on URL
         def get_side_effect(url, **_kwargs):
             mock_response = MagicMock()
 
-            if url.endswith("/list"):
-                mock_response.json.return_value = mock_meetings_list
+            # Direct endpoint for meeting 200
+            if url == "L10/200":
+                mock_response.json.return_value = {
+                    "Id": 200,
+                    "Basics": {"Name": "Success Meeting"},
+                    "CreateTime": None,
+                    "StartDateUtc": None,
+                    "OrganizationId": None,
+                }
+                mock_response.raise_for_status = MagicMock()
+            elif url in ("L10/999", "L10/500"):
+                # Simulate 404 for non-existent meetings
+                mock_response.raise_for_status.side_effect = HTTPStatusError(
+                    "Not Found",
+                    request=Request("GET", url),
+                    response=Response(404),
+                )
             elif "/200/attendees" in url:
                 mock_response.json.return_value = [
                     {
@@ -436,11 +466,11 @@ class TestAsyncMeetingOperations:
                         "ImageUrl": "https://example.com/img1.jpg",
                     }
                 ]
+                mock_response.raise_for_status = MagicMock()
             else:
-                # For issues, todos, metrics
                 mock_response.json.return_value = []
+                mock_response.raise_for_status = MagicMock()
 
-            mock_response.raise_for_status = MagicMock()
             return mock_response
 
         mock_async_client.get.side_effect = get_side_effect
@@ -458,11 +488,9 @@ class TestAsyncMeetingOperations:
         # Check failed items
         assert result.failed[0].index == 1
         assert result.failed[0].input_data["meeting_id"] == 999
-        assert "not found" in result.failed[0].error.lower()
 
         assert result.failed[1].index == 2
         assert result.failed[1].input_data["meeting_id"] == 500
-        assert "not found" in result.failed[1].error.lower()
 
     @pytest.mark.asyncio
     async def test_get_many_empty_list(
@@ -507,19 +535,7 @@ class TestAsyncMeetingOperations:
             # Extract the URL from args (first positional argument)
             url = args[0] if args else ""
 
-            if url.endswith("/list"):
-                # Return list of all meetings
-                mock_response.json.return_value = [
-                    {
-                        "Id": i + 400,
-                        "Type": "L10",
-                        "Key": f"L10-{i + 400}",
-                        "Name": f"Meeting {i}",
-                    }
-                    for i in range(5)
-                ]
-            elif "/attendees" in url:
-                # Return attendees for any meeting
+            if "/attendees" in url:
                 mock_response.json.return_value = [
                     {
                         "Id": 456,
@@ -527,9 +543,18 @@ class TestAsyncMeetingOperations:
                         "ImageUrl": "https://example.com/img.jpg",
                     }
                 ]
-            else:
-                # For issues, todos, metrics
+            elif "/issues" in url or "/todos" in url or "/measurables" in url:
                 mock_response.json.return_value = []
+            else:
+                # Direct L10/{id} endpoint
+                meeting_id = int(url.split("/")[1])
+                mock_response.json.return_value = {
+                    "Id": meeting_id,
+                    "Basics": {"Name": f"Meeting {meeting_id - 400}"},
+                    "CreateTime": None,
+                    "StartDateUtc": None,
+                    "OrganizationId": None,
+                }
 
             mock_response.raise_for_status = MagicMock()
             return mock_response
@@ -551,7 +576,7 @@ class TestAsyncMeetingOperations:
 
         # Verify concurrent execution
         # With max_concurrent=3 and 5 meetings:
-        # Each meeting makes 5 API calls (list, attendees, issues, todos, metrics)
+        # Each meeting makes 5 API calls (direct, attendees, issues, todos, metrics)
         # Each call has 0.1s delay, so each meeting takes ~0.5s
         # With concurrency of 3, we should see significant speedup vs sequential
         # Sequential would take 5 * 0.5 = 2.5s

@@ -122,7 +122,6 @@ class TestGoalOperations:
         mock_http_client.put.assert_called_once_with(
             "rocks/101",
             json={
-                "accountableUserId": 123,
                 "title": "Updated Goal",
                 "completion": "Complete",
             },
