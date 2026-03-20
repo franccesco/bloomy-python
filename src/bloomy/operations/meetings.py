@@ -5,7 +5,6 @@ from __future__ import annotations
 import builtins
 from typing import Any
 
-from ..exceptions import APIError
 from ..models import (
     BulkCreateError,
     BulkCreateResult,
@@ -167,9 +166,6 @@ class MeetingOperations(BaseOperations, MeetingOperationsMixin):
         Returns:
             A MeetingDetails model instance with comprehensive meeting information
 
-        Raises:
-            APIError: If the meeting with the specified ID is not found
-
         Example:
             ```python
             client.meeting.details(1)
@@ -178,18 +174,16 @@ class MeetingOperations(BaseOperations, MeetingOperationsMixin):
             ```
 
         """
-        meetings = self.list()
-        meeting = next((m for m in meetings if m.id == meeting_id), None)
-
-        if not meeting:
-            raise APIError(f"Meeting with ID {meeting_id} not found", status_code=404)
+        response = self._client.get(f"L10/{meeting_id}")
+        response.raise_for_status()
+        data: Any = response.json()
 
         return MeetingDetails(
-            id=meeting.id,
-            name=meeting.name,
-            start_date_utc=getattr(meeting, "start_date_utc", None),
-            created_date=getattr(meeting, "created_date", None),
-            organization_id=getattr(meeting, "organization_id", None),
+            id=data["Id"],
+            name=data.get("Basics", {}).get("Name", ""),
+            start_date_utc=data.get("StartDateUtc"),
+            created_date=data.get("CreateTime"),
+            organization_id=data.get("OrganizationId"),
             attendees=self.attendees(meeting_id),
             issues=self.issues(meeting_id, include_closed=include_closed),
             todos=self.todos(meeting_id, include_closed=include_closed),
