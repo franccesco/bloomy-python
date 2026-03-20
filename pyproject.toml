@@ -79,6 +79,9 @@ reportMissingImports = true
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra --strict-markers --cov=bloomy --cov-report=term-missing"
+markers = [
+  "integration: marks tests that hit the real Bloom Growth API (deselect with '-m \"not integration\"')",
+]
 
 [dependency-groups]
 dev = [
