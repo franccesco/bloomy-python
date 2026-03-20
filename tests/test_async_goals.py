@@ -190,15 +190,30 @@ class TestAsyncGoalOperations:
         self, async_client: AsyncClient, mock_async_client: AsyncMock
     ):
         """Test updating a goal."""
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_async_client.put.return_value = mock_response
+        mock_put_response = MagicMock()
+        mock_put_response.raise_for_status = MagicMock()
+        mock_async_client.put.return_value = mock_put_response
+
+        mock_get_response = MagicMock()
+        mock_get_response.raise_for_status = MagicMock()
+        mock_get_response.json.return_value = {
+            "Id": 123,
+            "Owner": {"Id": 1, "Name": "John Doe"},
+            "Name": "Updated Goal",
+            "CreateTime": "2024-01-01T00:00:00Z",
+            "DueDate": "2024-06-01",
+            "Complete": False,
+            "Origins": [{"Id": 10, "Name": "Team Meeting"}],
+        }
+        mock_async_client.get.return_value = mock_get_response
 
         result = await async_client.goal.update(
             goal_id=123, title="Updated Goal", status="on"
         )
 
-        assert result is None
+        assert isinstance(result, GoalInfo)
+        assert result.id == 123
+        assert result.title == "Updated Goal"
         mock_async_client.put.assert_called_once_with(
             "rocks/123",
             json={
