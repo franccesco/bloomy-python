@@ -41,6 +41,7 @@ class TestIssueOperations:
                 "Origin": "Infrastructure Meeting",
                 "OriginId": 456,
                 "DetailsUrl": "https://example.com/issue/401",
+                "Archived": False,
             }
         ]
         mock_http_client.get.return_value = mock_response
@@ -68,6 +69,7 @@ class TestIssueOperations:
                 "Origin": "Infrastructure Meeting",
                 "OriginId": 456,
                 "DetailsUrl": "https://example.com/issue/401",
+                "Archived": False,
             }
         ]
         mock_http_client.get.return_value = mock_response

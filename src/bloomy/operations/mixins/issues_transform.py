@@ -33,6 +33,7 @@ class IssueOperationsMixin:
             notes_url=data["DetailsUrl"],
             created_at=data["CreateTime"],
             completed_at=data["CloseTime"],
+            archived=data["Archived"],
             meeting_id=data["OriginId"],
             meeting_title=data["Origin"],
             user_id=data["Owner"]["Id"],
@@ -57,6 +58,7 @@ class IssueOperationsMixin:
                 title=issue["Name"],
                 notes_url=issue["DetailsUrl"],
                 created_at=issue["CreateTime"],
+                archived=issue["Archived"],
                 meeting_id=issue["OriginId"],
                 meeting_title=issue["Origin"],
             )
