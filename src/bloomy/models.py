@@ -36,6 +36,8 @@ def _parse_optional_float(v: Any) -> float | None:
 # Reusable annotated types for optional fields that may come as empty strings
 OptionalDatetime = Annotated[datetime | None, BeforeValidator(_parse_optional_datetime)]
 OptionalFloat = Annotated[float | None, BeforeValidator(_parse_optional_float)]
+# Coerces a nullable value (e.g. a datetime or None) into a bool (present = True)
+IsPresent = Annotated[bool, BeforeValidator(lambda v: v is not None and v != "")]
 
 
 class GoalStatus(StrEnum):
@@ -157,6 +159,7 @@ class Todo(BloomyBaseModel):
     meeting_id: int | None = Field(alias="OriginId", default=None)
     meeting_name: str | None = Field(alias="Origin", default=None)
     complete: bool = Field(alias="Complete", default=False)
+    archived: IsPresent = Field(alias="CloseTime", default=False)
 
 
 class Issue(BloomyBaseModel):
@@ -301,6 +304,7 @@ class IssueDetails(BloomyBaseModel):
     notes_url: str
     created_at: str
     completed_at: str | None = None
+    archived: bool = False
     meeting_id: int
     meeting_title: str
     user_id: int
@@ -314,6 +318,7 @@ class IssueListItem(BloomyBaseModel):
     title: str
     notes_url: str
     created_at: str
+    archived: bool = False
     meeting_id: int
     meeting_title: str | None
 

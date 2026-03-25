@@ -120,6 +120,7 @@ class TodoOperations(BaseOperations, TodoOperationsMixin):
             "DetailsUrl": data.get("DetailsUrl"),
             "DueDate": data.get("DueDate"),
             "CompleteTime": None,
+            "CloseTime": None,
             "CreateTime": data.get("CreateTime", datetime.now(UTC).isoformat()),
             "OriginId": meeting_id,
             "Origin": None,
