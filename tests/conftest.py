@@ -107,6 +107,7 @@ def sample_todo_data() -> dict[str, Any]:
         "Complete": False,
         "CreateTime": "2024-01-01T10:00:00Z",
         "CompleteTime": None,
+        "CloseTime": None,
         "Owner": {"Id": 123, "Name": "John Doe"},
     }
 
@@ -170,6 +171,7 @@ def sample_issue_data() -> dict[str, Any]:
         "CreateTime": "2024-06-01T10:00:00Z",
         "CloseTime": None,
         "Complete": False,
+        "Archived": False,
         "Owner": {"Id": 123, "Name": "John Doe"},
         "Origin": "Infrastructure Meeting",
         "OriginId": 456,
