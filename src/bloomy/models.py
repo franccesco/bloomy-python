@@ -33,11 +33,14 @@ def _parse_optional_float(v: Any) -> float | None:
     return float(v)
 
 
-# Reusable annotated types for optional fields that may come as empty strings
-OptionalDatetime = Annotated[datetime | None, BeforeValidator(_parse_optional_datetime)]
-OptionalFloat = Annotated[float | None, BeforeValidator(_parse_optional_float)]
+# Reusable annotated types for optional fields that may come as empty strings.
+# PEP 695 named aliases (requires pydantic>=2.11 for full support).
+type OptionalDatetime = Annotated[
+    datetime | None, BeforeValidator(_parse_optional_datetime)
+]
+type OptionalFloat = Annotated[float | None, BeforeValidator(_parse_optional_float)]
 # Coerces a nullable value (e.g. a datetime or None) into a bool (present = True)
-IsPresent = Annotated[bool, BeforeValidator(lambda v: v is not None and v != "")]
+type IsPresent = Annotated[bool, BeforeValidator(lambda v: v is not None and v != "")]
 
 
 class GoalStatus(StrEnum):
@@ -371,7 +374,8 @@ class HeadlineDetails(BloomyBaseModel):
     closed_at: str | None = None
 
 
-# HeadlineListItem is identical to HeadlineDetails - use type alias
+# HeadlineListItem is identical to HeadlineDetails - use assignment alias so the
+# name remains callable (PEP 695 `type` produces a non-callable TypeAliasType).
 HeadlineListItem = HeadlineDetails
 
 
