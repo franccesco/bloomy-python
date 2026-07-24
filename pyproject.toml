@@ -45,7 +45,6 @@ select = [
   "SIM",   # simplify — call out over-engineered constructs; prefer the obvious one-liner.
   "N",     # pep8-naming — enforce PEP 8 names for classes, funcs, vars, etc.
   "RUF",   # Ruff-native extras — Ruff-only correctness/perf rules (a la "unicorn").
-  "FAST",  # fastapi — idiomatic FastAPI patterns and anti-pattern detection.
   "DOC",   # pydoclint — Google/Numpy docstring section order & completeness.
   "D",     # pydocstyle — PEP 257 docstring formatting conformance.
   "ARG",   # unused-arguments — catch never-used *args/**kwargs/params.
