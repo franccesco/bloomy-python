@@ -145,4 +145,4 @@ class AsyncScorecardOperations(AsyncBaseOperations):
             json={"value": score},
         )
         response.raise_for_status()
-        return response.is_success
+        return True
