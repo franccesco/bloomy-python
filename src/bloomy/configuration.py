@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import urlencode
 
 import httpx
 import yaml
@@ -81,14 +80,11 @@ class Configuration:
         with httpx.Client() as client:
             response = client.post(
                 "https://app.bloomgrowth.com/Token",
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                content=urlencode(
-                    {
-                        "grant_type": "password",
-                        "userName": username,
-                        "password": password,
-                    }
-                ),
+                data={
+                    "grant_type": "password",
+                    "userName": username,
+                    "password": password,
+                },
             )
 
         if not response.is_success:

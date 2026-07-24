@@ -69,7 +69,14 @@ class TestConfiguration:
             config.configure_api_key("user", "pass")
 
             assert config.api_key == "new-api-key"
-            mock_client.post.assert_called_once()
+            mock_client.post.assert_called_once_with(
+                "https://app.bloomgrowth.com/Token",
+                data={
+                    "grant_type": "password",
+                    "userName": "user",
+                    "password": "pass",
+                },
+            )
 
     def test_configure_api_key_failure(self):
         """Test API key configuration with authentication failure."""
