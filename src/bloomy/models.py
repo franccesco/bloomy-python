@@ -52,7 +52,8 @@ class BloomyBaseModel(BaseModel):
     """Base model with common configuration for all Bloomy models."""
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         use_enum_values=True,
         validate_assignment=True,
         arbitrary_types_allowed=True,
