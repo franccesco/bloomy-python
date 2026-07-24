@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from ..models import BulkCreateError, BulkCreateResult
@@ -70,7 +71,7 @@ class AbstractOperations:
     def _process_bulk_sync[T](
         self,
         items: list[dict[str, Any]],
-        create_func: Any,
+        create_func: Callable[[dict[str, Any]], T],
         required_fields: list[str],
     ) -> BulkCreateResult[T]:
         """Process bulk creation synchronously.

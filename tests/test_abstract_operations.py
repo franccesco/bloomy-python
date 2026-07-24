@@ -85,3 +85,26 @@ class TestAbstractOperations:
         # Test with all None values
         params = ops._prepare_params(a=None, b=None)
         assert params == {}
+
+    def test_process_bulk_sync_create_func_signature(self) -> None:
+        """_process_bulk_sync accepts Callable[[dict[str, Any]], T] create_func."""
+        client = MockHTTPClient()
+        ops = ConcreteOperations(client)
+
+        def create_func(item_data: dict) -> str:
+            return f"created-{item_data['title']}"
+
+        result = ops._process_bulk_sync(
+            [
+                {"title": "a"},
+                {"title": "b"},
+                {},  # missing required field
+            ],
+            create_func,
+            required_fields=["title"],
+        )
+
+        assert result.successful == ["created-a", "created-b"]
+        assert len(result.failed) == 1
+        assert result.failed[0].index == 2
+        assert "title" in result.failed[0].error
