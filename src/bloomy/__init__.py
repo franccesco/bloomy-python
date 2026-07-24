@@ -8,6 +8,8 @@ from .configuration import Configuration
 from .exceptions import APIError, AuthenticationError, BloomyError, ConfigurationError
 from .models import (
     ArchivedGoalInfo,
+    BulkCreateError,
+    BulkCreateResult,
     CreatedGoalInfo,
     CreatedIssue,
     CurrentWeek,
@@ -49,6 +51,8 @@ __all__ = [
     "AsyncClient",
     "AuthenticationError",
     "BloomyError",
+    "BulkCreateError",
+    "BulkCreateResult",
     "Client",
     "Configuration",
     "ConfigurationError",
