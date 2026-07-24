@@ -11,7 +11,7 @@ import pytest_asyncio
 from bloomy import AsyncClient, Client
 from bloomy.models import CreatedIssue, IssueDetails, IssueListItem
 
-MEETING_ID = 324926
+MEETING_ID = 327249  # Scorecard Test Meeting (was 324926, access revoked)
 
 pytestmark = pytest.mark.integration
 
