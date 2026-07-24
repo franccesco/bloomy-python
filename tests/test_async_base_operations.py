@@ -81,3 +81,50 @@ class TestAsyncBaseOperations:
 
         # Verify API call
         client.get.assert_called_once_with("users/mine")
+
+    @pytest.mark.asyncio
+    async def test_process_bulk_async_preserves_input_order(self) -> None:
+        """Gather results stay in input order even when later items finish first."""
+        import asyncio
+
+        client = MockAsyncHTTPClient()
+        ops = AsyncBaseOperations(client)
+
+        # Delays inverted so item 0 finishes last, item 2 finishes first.
+        delays = {0: 0.05, 1: 0.02, 2: 0.01}
+
+        async def create_func(item_data: dict) -> str:
+            await asyncio.sleep(delays[item_data["index"]])
+            return f"created-{item_data['index']}"
+
+        items = [{"index": i, "title": f"item-{i}"} for i in range(3)]
+        result = await ops._process_bulk_async(
+            items, create_func, required_fields=["title"], max_concurrent=3
+        )
+
+        assert result.failed == []
+        assert result.successful == ["created-0", "created-1", "created-2"]
+
+    @pytest.mark.asyncio
+    async def test_process_bulk_async_failure_index_matches_input(self) -> None:
+        """Failed items keep the original input index without post-sort."""
+        import asyncio
+
+        client = MockAsyncHTTPClient()
+        ops = AsyncBaseOperations(client)
+
+        async def create_func(item_data: dict) -> str:
+            await asyncio.sleep(0.01 if item_data["index"] != 0 else 0.03)
+            if item_data["index"] == 1:
+                raise ValueError("boom")
+            return f"created-{item_data['index']}"
+
+        items = [{"index": i, "title": f"item-{i}"} for i in range(3)]
+        result = await ops._process_bulk_async(
+            items, create_func, required_fields=["title"], max_concurrent=3
+        )
+
+        assert result.successful == ["created-0", "created-2"]
+        assert len(result.failed) == 1
+        assert result.failed[0].index == 1
+        assert "boom" in result.failed[0].error
