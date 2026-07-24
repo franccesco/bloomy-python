@@ -31,7 +31,7 @@ class TestConfiguration:
 
         with (
             patch.dict(os.environ, {"BG_API_KEY": ""}),  # Clear env var
-            patch("builtins.open", mock_open(read_data=yaml.dump(mock_yaml_data))),
+            patch("pathlib.Path.open", mock_open(read_data=yaml.dump(mock_yaml_data))),
             patch("pathlib.Path.exists", return_value=True),
         ):
             config = Configuration()
@@ -43,7 +43,7 @@ class TestConfiguration:
 
         with (
             patch.dict(os.environ, {"BG_API_KEY": "env-key"}),
-            patch("builtins.open", mock_open(read_data=yaml.dump(mock_yaml_data))),
+            patch("pathlib.Path.open", mock_open(read_data=yaml.dump(mock_yaml_data))),
             patch("pathlib.Path.exists", return_value=True),
         ):
             # Direct API key takes precedence
@@ -108,7 +108,7 @@ class TestConfiguration:
             mock_client_class.return_value.__enter__.return_value = mock_client
 
             with (
-                patch("builtins.open", mock_open()) as mock_file,
+                patch("pathlib.Path.open", mock_open()) as mock_file,
                 patch("pathlib.Path.mkdir"),
             ):
                 config = Configuration()
@@ -147,7 +147,7 @@ class TestConfiguration:
     def test_load_api_key_invalid_yaml(self):
         """Test loading API key with invalid YAML."""
         with (
-            patch("builtins.open", mock_open(read_data="invalid: yaml: content:")),
+            patch("pathlib.Path.open", mock_open(read_data="invalid: yaml: content:")),
             patch("pathlib.Path.exists", return_value=True),
             patch.dict(os.environ, {}, clear=True),
         ):
@@ -159,7 +159,7 @@ class TestConfiguration:
         """Test that configuration is loaded from the correct location."""
         with (
             patch("pathlib.Path.exists") as mock_exists,
-            patch("builtins.open", mock_open(read_data="api_key: test-key")),
+            patch("pathlib.Path.open", mock_open(read_data="api_key: test-key")),
             patch.dict(os.environ, {}, clear=True),
         ):
             # Initialize config which should try to load from file

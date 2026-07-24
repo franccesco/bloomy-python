@@ -109,7 +109,7 @@ class Configuration:
         config_file.parent.mkdir(parents=True, exist_ok=True)
 
         config_data = {"version": 1, "api_key": self.api_key}
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             yaml.dump(config_data, f)
 
     def _load_api_key(self) -> str | None:
@@ -124,7 +124,7 @@ class Configuration:
             return None
 
         try:
-            with open(config_file) as f:
+            with config_file.open() as f:
                 data = yaml.safe_load(f)
                 return data.get("api_key")
         except Exception:
