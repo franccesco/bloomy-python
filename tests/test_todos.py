@@ -116,7 +116,9 @@ class TestTodoOperations:
 
         assert result.id == 789
         assert result.complete is True
-        mock_http_client.post.assert_called_once_with("todo/789/complete?status=true")
+        mock_http_client.post.assert_called_once_with(
+            "todo/789/complete", params={"status": True}
+        )
         mock_http_client.get.assert_called_once_with("todo/789")
 
     def test_update_todo(self, mock_http_client: Mock) -> None:

@@ -145,7 +145,9 @@ class AsyncTodoOperations(AsyncBaseOperations, TodoOperationsMixin):
             ```
 
         """
-        response = await self._client.post(f"todo/{todo_id}/complete?status=true")
+        response = await self._client.post(
+            f"todo/{todo_id}/complete", params={"status": True}
+        )
         response.raise_for_status()
         return await self.details(todo_id)
 
