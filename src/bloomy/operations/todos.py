@@ -145,7 +145,9 @@ class TodoOperations(BaseOperations, TodoOperationsMixin):
             ```
 
         """
-        response = self._client.post(f"todo/{todo_id}/complete?status=true")
+        response = self._client.post(
+            f"todo/{todo_id}/complete", params={"status": True}
+        )
         response.raise_for_status()
         return self.details(todo_id)
 
