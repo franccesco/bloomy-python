@@ -14,7 +14,7 @@ from bloomy.models import (
     GoalStatus,
 )
 
-MEETING_ID = 324926
+MEETING_ID = 327249  # Scorecard Test Meeting (was 324926, access revoked)
 
 
 @pytest.fixture(scope="module")

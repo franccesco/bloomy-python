@@ -293,7 +293,7 @@ class ScorecardItem(BloomyBaseModel):
     measurable_id: int
     accountable_user_id: int
     title: str
-    target: float
+    target: OptionalFloat = None  # API may return null Target for unset goals
     value: float | None = None
     week: str  # Changed from int to str to handle "2024-W25" format
     week_id: int
