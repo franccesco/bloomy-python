@@ -78,6 +78,7 @@ reportMissingImports = true
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra --strict-markers --cov=bloomy --cov-report=term-missing"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
   "integration: marks tests that hit the real Bloom Growth API (deselect with '-m \"not integration\"')",
 ]
