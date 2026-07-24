@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 import httpx
 
@@ -92,7 +92,7 @@ class Client:
         self.issue = IssueOperations(self._client)
         self.headline = HeadlineOperations(self._client)
 
-    def __enter__(self) -> Client:
+    def __enter__(self) -> Self:
         """Context manager entry.
 
         Returns:

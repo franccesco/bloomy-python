@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 import httpx
 
@@ -112,7 +112,7 @@ class AsyncClient:
             self._client
         )
 
-    async def __aenter__(self) -> AsyncClient:
+    async def __aenter__(self) -> Self:
         """Enter the async context manager.
 
         Returns:
