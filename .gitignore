@@ -197,3 +197,6 @@ pyrightconfig.json
 
 # Dream plugin local state (baseline, findings ledger, run logs)
 .claude/dream/
+
+# Grok CLI local state
+.grok/
