@@ -93,29 +93,25 @@ class AsyncBaseOperations(AbstractOperations):
 
         async def create_single(
             index: int, item_data: dict[str, Any]
-        ) -> tuple[int, T | BulkCreateError]:
+        ) -> T | BulkCreateError:
             async with semaphore:
                 try:
                     self._validate_bulk_item(item_data, required_fields)
-                    created = await create_func(item_data)
-                    return (index, created)
+                    return await create_func(item_data)
                 except Exception as e:
-                    error = BulkCreateError(
+                    return BulkCreateError(
                         index=index, input_data=item_data, error=str(e)
                     )
-                    return (index, error)
 
-        tasks = [
-            create_single(index, item_data) for index, item_data in enumerate(items)
-        ]
-        results = await asyncio.gather(*tasks)
-        results_list = list(results)
-        results_list.sort(key=lambda x: x[0])
+        # asyncio.gather preserves input order, so no post-sort is needed.
+        results = await asyncio.gather(
+            *(create_single(index, item_data) for index, item_data in enumerate(items))
+        )
 
         successful: list[T] = []
         failed: list[BulkCreateError] = []
 
-        for _, result in results_list:
+        for result in results:
             if isinstance(result, BulkCreateError):
                 failed.append(result)
             else:
