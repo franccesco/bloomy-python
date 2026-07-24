@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from ...models import (
     DirectReport,
     Position,
@@ -25,6 +27,9 @@ class AsyncUserOperations(AsyncBaseOperations, UserOperationsMixin):
     ) -> UserDetails:
         """Retrieve details of a specific user.
 
+        When both direct reports and positions are requested, the two
+        sub-resource fetches run concurrently via ``asyncio.gather``.
+
         Args:
             user_id: The ID of the user (default: the current user ID)
             include_direct_reports: Whether to include direct reports
@@ -44,13 +49,20 @@ class AsyncUserOperations(AsyncBaseOperations, UserOperationsMixin):
         response.raise_for_status()
         data = response.json()
 
+        fetch_reports = include_direct_reports or include_all
+        fetch_positions = include_positions or include_all
+
         direct_reports_data = None
         positions_data = None
 
-        if include_direct_reports or include_all:
+        if fetch_reports and fetch_positions:
+            direct_reports_data, positions_data = await asyncio.gather(
+                self.direct_reports(user_id),
+                self.positions(user_id),
+            )
+        elif fetch_reports:
             direct_reports_data = await self.direct_reports(user_id)
-
-        if include_positions or include_all:
+        elif fetch_positions:
             positions_data = await self.positions(user_id)
 
         return self._transform_user_details(data, direct_reports_data, positions_data)

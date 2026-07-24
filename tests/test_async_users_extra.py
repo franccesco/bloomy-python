@@ -1,5 +1,6 @@
 """Additional tests for async user operations to improve coverage."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -209,3 +210,64 @@ class TestAsyncUserOperationsExtra:
         mock_async_client.get.assert_called_once_with(
             "search/all", params={"term": "%"}
         )
+
+    @pytest.mark.asyncio
+    async def test_details_include_all_fetches_subresources_concurrently(
+        self,
+        async_client: AsyncClient,
+        mock_async_client: AsyncMock,
+    ) -> None:
+        """When both flags are set, direct reports and positions run concurrently."""
+        user_data = {
+            "Id": 123,
+            "Name": "John Doe",
+            "Description": "CEO",
+            "Email": "john@example.com",
+            "OrganizationId": 1,
+            "ImageUrl": "https://example.com/avatar.jpg",
+        }
+        reports_data = [
+            {
+                "Id": 456,
+                "Name": "Jane Smith",
+                "Description": "VP Sales",
+                "Email": "jane@example.com",
+                "OrganizationId": 1,
+                "ImageUrl": "https://example.com/jane.jpg",
+            }
+        ]
+        positions_data = [{"Group": {"Position": {"Id": 1, "Name": "CEO"}}}]
+
+        in_flight = 0
+        max_in_flight = 0
+
+        async def get_side_effect(url: str) -> MagicMock:
+            nonlocal in_flight, max_in_flight
+            in_flight += 1
+            max_in_flight = max(max_in_flight, in_flight)
+            await asyncio.sleep(0.02)
+            in_flight -= 1
+
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            if url == "users/123":
+                resp.json.return_value = user_data
+            elif url == "users/123/directreports":
+                resp.json.return_value = reports_data
+            elif url == "users/123/seats":
+                resp.json.return_value = positions_data
+            else:
+                raise ValueError(f"Unexpected URL: {url}")
+            return resp
+
+        mock_async_client.get.side_effect = get_side_effect
+
+        result = await async_client.user.details(user_id=123, include_all=True)
+
+        assert isinstance(result, UserDetails)
+        assert result.direct_reports is not None
+        assert result.positions is not None
+        assert len(result.direct_reports) == 1
+        assert len(result.positions) == 1
+        # User details first (sequential), then the two sub-resources overlap.
+        assert max_in_flight >= 2
