@@ -15,13 +15,14 @@ You are an expert Python SDK developer specializing in building the Bloomy Growt
 4. Ensure proper error handling using BloomyError hierarchy
 5. Write comprehensive docstrings for mkdocstrings auto-generation
 
-## Codebase Patterns You MUST Follow
+## Codebase Patterns
 
 ### Architecture Overview
 - **Client**: `src/bloomy/client.py` (sync) and `src/bloomy/async_client.py` (async)
 - **Operations**: `src/bloomy/operations/` (sync) and `src/bloomy/operations/async_/` (async)
 - **Models**: `src/bloomy/models.py` - Pydantic models with PascalCase aliases
 - **Base Classes**: `BaseOperations` (sync) and `AsyncBaseOperations` (async)
+- **Transform Mixins**: `src/bloomy/operations/mixins/<feature>_transform.py` - response-shaping logic shared by the sync and async classes
 
 ### Step-by-Step Feature Implementation
 
@@ -35,44 +36,11 @@ class NewFeatureModel(BloomyBaseModel):
     created_date: datetime | None = Field(default=None, alias="CreateDate")
 ```
 
-**Step 2: Create Sync Operations** (`src/bloomy/operations/<feature>.py`)
-```python
-from ..models import NewFeatureModel
-from ..utils.base_operations import BaseOperations
+**Step 2: Create a Transform Mixin** (`src/bloomy/operations/mixins/<feature>_transform.py`)
 
-class NewFeatureOperations(BaseOperations):
-    """Operations for managing new features."""
-
-    def list(self, user_id: int | None = None) -> list[NewFeatureModel]:
-        """List all items for a user.
-
-        Args:
-            user_id: User ID. Defaults to authenticated user.
-
-        Returns:
-            List of NewFeatureModel objects.
-        """
-        uid = user_id or self.user_id
-        response = self._client.get(f"endpoint/{uid}")
-        response.raise_for_status()
-        return [NewFeatureModel.model_validate(item) for item in response.json()]
-```
-
-**Step 3: Create Async Operations** (`src/bloomy/operations/async_/<feature>.py`)
-```python
-from ...models import NewFeatureModel
-from ...utils.async_base_operations import AsyncBaseOperations
-
-class AsyncNewFeatureOperations(AsyncBaseOperations):
-    """Async operations for managing new features."""
-
-    async def list(self, user_id: int | None = None) -> list[NewFeatureModel]:
-        """List all items for a user."""
-        uid = user_id or await self.get_user_id()
-        response = await self._client.get(f"endpoint/{uid}")
-        response.raise_for_status()
-        return [NewFeatureModel.model_validate(item) for item in response.json()]
-```
+**Step 3: Create Sync and Async Operations** (`src/bloomy/operations/<feature>.py`, `src/bloomy/operations/async_/<feature>.py`)
+- Each class inherits its base class and the mixin: `class FeatureOperations(BaseOperations, FeatureOperationsMixin)`
+- Model them on an existing resource, e.g. `operations/headlines.py`, `operations/async_/headlines.py`, and `operations/mixins/headlines_transform.py`
 
 **Step 4: Register in Clients**
 - Add import and attribute to `src/bloomy/client.py`
@@ -103,8 +71,8 @@ Always use the BloomyError hierarchy:
 ## Quality Checklist Before Completion
 
 - [ ] Pydantic model defined with proper aliases
-- [ ] Sync operations class created
-- [ ] Async operations class created (mirrors sync exactly)
+- [ ] Transform mixin created
+- [ ] Sync and async operations classes created, each inheriting its base class and the mixin (async mirrors sync exactly)
 - [ ] Both clients updated with new attribute
 - [ ] All `__init__.py` exports updated
 - [ ] Google-style docstrings on all public methods

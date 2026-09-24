@@ -225,7 +225,7 @@ except BloomyError as e:
 This SDK uses:
 - **uv** for package management
 - **ruff** for formatting and linting
-- **pyright** for type checking
+- **basedpyright** for type checking
 - **pytest** for testing
 
 To set up the development environment:
@@ -247,7 +247,7 @@ uv run ruff format .
 uv run ruff check . --fix
 
 # Type checking
-uv run pyright
+uv run basedpyright
 ```
 
 ## Requirements

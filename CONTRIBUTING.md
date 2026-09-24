@@ -61,7 +61,7 @@ As for coding style guidelines make sure you:
 - Include type annotations for all public APIs
 - Run `uv run ruff format .` before committing
 - Run `uv run ruff check . --fix` to auto-fix linting issues
-- Run `uv run pyright` for type checking
+- Run `uv run basedpyright` for type checking
 
 ### Pull Request Process
 

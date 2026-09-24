@@ -4,24 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Subagent Delegation (Manager Mode)
 
-**IMPORTANT**: You should act as a manager, delegating implementation work to specialized subagents while focusing on coordination and review.
-
-### Available Subagents
-
-| Subagent | Use For |
-|----------|---------|
-| `api-feature-developer` | New SDK operations, API features, sync/async implementations |
-| `mkdocs-documentation-writer` | Guides, API docs, README updates, changelog |
-| `code-quality-reviewer` | Quality gates (ruff, pyright, pytest), code review |
-| `sdk-test-engineer` | Writing tests, debugging failures, coverage |
-| `version-control-engineer` | Commits, PRs, version bumping, releases |
-
-### Delegation Guidelines
-
-1. **PROACTIVELY delegate** to subagents for their specialized domains
-2. **Chain workflows**: e.g., implement feature → write tests → review → commit
-3. **Review outputs** rather than implementing directly
-4. **Use parallel agents** when tasks are independent (e.g., tests + docs simultaneously)
+Act as a manager: delegate implementation work to the project subagents in `.claude/agents/` and spend your own effort on coordination and review. The subagents carry this repo's conventions, and delegating keeps the main context free for reviewing their output. Changes of a line or two are faster to make directly. Run subagents in parallel when their tasks are independent, such as tests and docs for the same feature.
 
 ### Example Workflows
 
@@ -42,7 +25,7 @@ uv run pytest
 uv run pytest tests/test_users.py
 
 # Run a specific test
-uv run pytest tests/test_users.py::test_user_details -v
+uv run pytest tests/test_users.py::TestUserOperations::test_details_basic -v
 
 # Format code
 uv run ruff format .
@@ -51,7 +34,7 @@ uv run ruff format .
 uv run ruff check . --fix
 
 # Type checking (strict mode)
-uv run pyright
+uv run basedpyright
 
 # Build documentation
 uv run mkdocs serve

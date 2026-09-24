@@ -48,7 +48,7 @@ fix(async): resolve race condition in concurrent requests
 
 docs(guide): add async bulk operations documentation
 
-chore: bump version to 0.19.0
+chore(release): bump version to 0.19.0
 ```
 
 ## Version Management
@@ -61,25 +61,6 @@ chore: bump version to 0.19.0
 - **MAJOR** (X.0.0): Breaking API changes
 - **MINOR** (0.X.0): New features, backward compatible
 - **PATCH** (0.0.X): Bug fixes, backward compatible
-
-### Version Bump Process
-
-```bash
-# 1. Ensure all changes are committed
-git status
-
-# 2. Update version in pyproject.toml
-# Edit: version = "0.20.0"
-
-# 3. Update CHANGELOG.md (see Changelog section below)
-
-# 4. Commit version bump and changelog
-git add pyproject.toml CHANGELOG.md
-git commit -m "chore: bump version to 0.20.0"
-
-# 5. Create git tag
-git tag -a v0.20.0 -m "Release v0.20.0"
-```
 
 ## Changelog Management
 
@@ -169,7 +150,7 @@ EOF
 
 ### PR Review Checklist
 - All CI checks pass (when available)
-- Quality gates pass locally (`ruff`, `pyright`, `pytest`)
+- Quality gates pass locally (`ruff`, `basedpyright`, `pytest`)
 - Documentation is updated
 - Tests are included
 - Follows SDK patterns
@@ -186,35 +167,32 @@ git pull origin main
 # 2. Run full quality check
 uv run ruff format .
 uv run ruff check . --fix
-uv run pyright
+uv run basedpyright
 uv run pytest
 uv run mkdocs build --strict
 
-# 3. Verify all tests pass
-# 4. Review recent commits for changelog
-git log --oneline v0.19.0..HEAD
+# 3. Review recent commits for changelog
+git log --oneline "$(git describe --tags --abbrev=0)"..HEAD
 ```
 
 ### Release Steps
 
+The release commit goes through a PR like any other change (see Safety Rules).
+
 ```bash
-# 1. Update CHANGELOG.md
-#    - Move items from [Unreleased] to new version section
-#    - Add release date: ## [0.20.0] - 2025-12-10
-#    - Update comparison links at bottom
+# 1. Create the release branch
+git checkout -b chore/release-vX.Y.Z
 
-# 2. Update version in pyproject.toml
-#    version = "0.20.0"
-
-# 3. Commit release
+# 2. Update CHANGELOG.md (see "During Release" above) and set version = "X.Y.Z" in pyproject.toml
 git add CHANGELOG.md pyproject.toml
-git commit -m "chore: release v0.20.0"
+git commit -m "chore(release): bump version to X.Y.Z"
+git push -u origin chore/release-vX.Y.Z
+gh pr create --title "chore(release): bump version to X.Y.Z" --body "..."
 
-# 4. Create annotated tag (simple message - changelog is in CHANGELOG.md)
-git tag -a v0.20.0 -m "Release v0.20.0"
-
-# 5. Push with tags
-git push origin main --tags
+# 3. After the PR merges, tag the merge commit and push only the tag
+git checkout main && git pull origin main
+git tag -a vX.Y.Z -m "Release vX.Y.Z"   # simple message - changelog is in CHANGELOG.md
+git push origin vX.Y.Z
 ```
 
 ### Automated GitHub Release
@@ -238,16 +216,13 @@ When you push a tag matching `v*`, the GitHub Actions workflow (`.github/workflo
 git log --oneline -20
 
 # View changes since last tag
-git log --oneline v0.18.0..HEAD
+git log --oneline "$(git describe --tags --abbrev=0)"..HEAD
 
 # Check current status
 git status
 
 # View diff of staged changes
 git diff --staged
-
-# Interactive rebase (clean up commits)
-git rebase -i HEAD~3
 
 # Amend last commit (careful!)
 git commit --amend
