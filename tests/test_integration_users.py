@@ -97,6 +97,7 @@ class TestConfiguration:
         """Client should raise ConfigurationError when no API key exists."""
         monkeypatch.delenv("BG_API_KEY", raising=False)
         # Patch _load_api_key to ensure no config file fallback
+        monkeypatch.setattr(Configuration, "_load_api_key", lambda _self: None)
         with pytest.raises(ConfigurationError):
             Client(api_key=None)
 
@@ -105,6 +106,7 @@ class TestConfiguration:
     ) -> None:
         """Whitespace-only API key should be rejected by Client."""
         monkeypatch.delenv("BG_API_KEY", raising=False)
+        monkeypatch.setattr(Configuration, "_load_api_key", lambda _self: None)
         with pytest.raises(ConfigurationError):
             Client(api_key="   ")
 
