@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
@@ -92,6 +92,15 @@ class TestGoalOperationsSync:
 
         assert result.owner is None
 
+    def test_details_raises_when_goal_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `goal` is `null` (unknown id)."""
+        client = Mock()
+        ops = GoalOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"goal": None}})
+
+        with pytest.raises(GraphQLError, match="Goal 999999999 not found"):
+            ops.details(999999999)
+
     def test_list_by_meeting_default_where(self) -> None:
         """`list(meeting_id=...)` filters archived goals out by default."""
         client = Mock()
@@ -174,6 +183,42 @@ class TestGoalOperationsSync:
         assert isinstance(input_["dueDate"], float)
         assert "notesId" not in input_
         assert "milestones" not in input_
+
+    def test_create_default_due_date_is_90_days_from_today_utc(self) -> None:
+        """The default due date is 90 days from today, at 00:00 UTC.
+
+        Not the local calendar date: `date.today()` can differ from the UTC
+        date near a day boundary.
+        """
+        client = Mock()
+        ops = GoalOperations(client, GRAPHQL_URL)
+        client.post.side_effect = [
+            _response({"data": {"CreateGoal": {"id": 5265048}}}),
+            _response({"data": {"goal": GOAL_NODE}}),
+        ]
+
+        ops.create(349524, "SDK v2 test goal", user_id=1305290)
+
+        create_variables = client.post.call_args_list[0].kwargs["json"]["variables"]
+        due_date = datetime.fromtimestamp(create_variables["input"]["dueDate"], tz=UTC)
+        expected_date = (datetime.now(tz=UTC) + timedelta(days=90)).date()
+        assert due_date.date() == expected_date
+        assert due_date.time() == datetime.min.time()
+
+    def test_create_raises_when_create_goal_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateGoal` returns id `0`.
+
+        A failed `CreateGoal` returns `IdModel(0)` rather than a top-level
+        GraphQL error.
+        """
+        client = Mock()
+        ops = GoalOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"CreateGoal": {"id": 0}}})
+
+        with pytest.raises(GraphQLError, match="create goal failed"):
+            ops.create(349524, "SDK v2 test goal", user_id=1305290)
+
+        assert client.post.call_count == 1
 
     def test_create_with_notes_calls_create_note_first(self) -> None:
         """`create(notes=...)` calls `CreateNote` before `CreateGoal`."""
@@ -461,6 +506,16 @@ class TestGoalOperationsAsync:
         assert len(result.milestones) == 1
 
     @pytest.mark.asyncio
+    async def test_details_raises_when_goal_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `goal` is `null`."""
+        client = AsyncMock()
+        ops = AsyncGoalOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"goal": None}})
+
+        with pytest.raises(GraphQLError, match="Goal 999999999 not found"):
+            await ops.details(999999999)
+
+    @pytest.mark.asyncio
     async def test_list_both_ids_raises(self) -> None:
         """`list()` with both `meeting_id` and `user_id` raises `ValueError`."""
         client = AsyncMock()
@@ -559,6 +614,18 @@ class TestGoalOperationsAsync:
 
         create_variables = client.post.call_args_list[1].kwargs["json"]["variables"]
         assert create_variables["input"]["assignee"] == 1305290
+
+    @pytest.mark.asyncio
+    async def test_create_raises_when_create_goal_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateGoal` returns id `0`."""
+        client = AsyncMock()
+        ops = AsyncGoalOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"CreateGoal": {"id": 0}}})
+
+        with pytest.raises(GraphQLError, match="create goal failed"):
+            await ops.create(349524, "SDK v2 test goal", user_id=1305290)
+
+        assert client.post.call_count == 1
 
     @pytest.mark.asyncio
     async def test_create_with_notes_calls_create_note_first(self) -> None:

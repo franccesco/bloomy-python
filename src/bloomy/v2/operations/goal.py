@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import builtins
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from ...exceptions import GraphQLError
@@ -122,6 +122,15 @@ class GoalOperationsMixin:
             return None
         return {"and": [{"archived": {"eq": False}}]}
 
+    def _default_due_date(self) -> date:
+        """Compute the default due date: 90 days from today, 00:00 UTC.
+
+        Returns:
+            A `date` 90 days from today (UTC).
+
+        """
+        return datetime.now(tz=UTC).date() + timedelta(days=90)
+
     def _parse_milestone_item(
         self, item: dict[str, Any] | tuple[Any, ...]
     ) -> tuple[Any, Any, bool]:
@@ -239,7 +248,7 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
 
         """
         data = self._execute(self._GOAL_DETAILS_QUERY, {"id": goal_id})
-        return self._transform_goal(data["goal"])
+        return self._transform_goal(self._require_entity(data, "goal", goal_id, "Goal"))
 
     def create(
         self,
@@ -279,7 +288,7 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
         if user_id is None:
             user_id = self.user_id
         if due_date is None:
-            due_date = date.today() + timedelta(days=90)
+            due_date = self._default_due_date()
 
         input_: dict[str, Any] = {
             "title": title,
@@ -306,7 +315,8 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
             ]
 
         data = self._execute(self._GOAL_CREATE_MUTATION, {"input": input_})
-        return self.details(data["CreateGoal"]["id"])
+        goal_id = self._require_created_id(data.get("CreateGoal"), label="goal")
+        return self.details(goal_id)
 
     def update(
         self,
@@ -477,7 +487,7 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
 
         """
         data = await self._execute(self._GOAL_DETAILS_QUERY, {"id": goal_id})
-        return self._transform_goal(data["goal"])
+        return self._transform_goal(self._require_entity(data, "goal", goal_id, "Goal"))
 
     async def create(
         self,
@@ -511,7 +521,7 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
         if user_id is None:
             user_id = await self.get_user_id()
         if due_date is None:
-            due_date = date.today() + timedelta(days=90)
+            due_date = self._default_due_date()
 
         input_: dict[str, Any] = {
             "title": title,
@@ -538,7 +548,8 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
             ]
 
         data = await self._execute(self._GOAL_CREATE_MUTATION, {"input": input_})
-        return await self.details(data["CreateGoal"]["id"])
+        goal_id = self._require_created_id(data.get("CreateGoal"), label="goal")
+        return await self.details(goal_id)
 
     async def update(
         self,

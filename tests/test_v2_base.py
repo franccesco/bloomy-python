@@ -13,6 +13,7 @@ from bloomy.v2.base import (
     AsyncGraphQLOperations,
     GraphQLOperations,
     extract_notes,
+    merge_nodes,
     prepare_note_text,
 )
 
@@ -115,6 +116,99 @@ class TestParseResponse:
 
         with pytest.raises(httpx.HTTPStatusError):
             ops._execute("query {}")
+
+
+class TestMergeNodes:
+    """Tests for `merge_nodes`."""
+
+    def test_dedupes_by_id_keeping_first_occurrence(self) -> None:
+        """A node appearing in multiple lists is kept only once, first wins."""
+        first = {"id": 1, "dateCreated": 100, "title": "first"}
+        duplicate = {"id": 1, "dateCreated": 100, "title": "duplicate"}
+
+        result = merge_nodes([first], [duplicate])
+
+        assert result == [first]
+
+    def test_sorts_by_date_created_then_id(self) -> None:
+        """Merged nodes are sorted by `(dateCreated, id)`, not input order."""
+        newer = {"id": 2, "dateCreated": 200}
+        older = {"id": 1, "dateCreated": 100}
+        tie_a = {"id": 10, "dateCreated": 150}
+        tie_b = {"id": 5, "dateCreated": 150}
+
+        result = merge_nodes([newer, older], [tie_a, tie_b])
+
+        assert [node["id"] for node in result] == [1, 5, 10, 2]
+
+    def test_empty_lists_return_empty(self) -> None:
+        """Merging only empty lists returns an empty list."""
+        assert merge_nodes([], []) == []
+
+    def test_custom_date_field(self) -> None:
+        """A custom `date_field` is used for sorting instead of `dateCreated`."""
+        a = {"id": 1, "timestamp": 200}
+        b = {"id": 2, "timestamp": 100}
+
+        result = merge_nodes([a, b], date_field="timestamp")
+
+        assert [node["id"] for node in result] == [2, 1]
+
+
+class TestRequireEntity:
+    """Tests for `_require_entity`."""
+
+    def test_returns_entity_when_present(self) -> None:
+        """A present, non-null entity is returned unchanged."""
+        client = Mock()
+        ops = GraphQLOperations(client, GRAPHQL_URL)
+
+        result = ops._require_entity({"issue": {"id": 1}}, "issue", 1, "Issue")
+
+        assert result == {"id": 1}
+
+    def test_raises_when_field_missing(self) -> None:
+        """A response with no `field` key at all raises `GraphQLError`."""
+        client = Mock()
+        ops = GraphQLOperations(client, GRAPHQL_URL)
+
+        with pytest.raises(GraphQLError, match="Issue 999 not found"):
+            ops._require_entity({}, "issue", 999, "Issue")
+
+    def test_raises_when_field_is_null(self) -> None:
+        """A `null` entity (unknown or invisible id) raises `GraphQLError`."""
+        client = Mock()
+        ops = GraphQLOperations(client, GRAPHQL_URL)
+
+        with pytest.raises(GraphQLError, match="Meeting 999999999 not found"):
+            ops._require_entity({"meeting": None}, "meeting", 999999999, "Meeting")
+
+
+class TestRequireCreatedId:
+    """Tests for `_require_created_id`."""
+
+    def test_returns_id_when_present(self) -> None:
+        """A non-zero `id` is returned as an `int`."""
+        client = Mock()
+        ops = GraphQLOperations(client, GRAPHQL_URL)
+
+        assert ops._require_created_id({"id": 5265048}, label="goal") == 5265048
+
+    def test_raises_when_result_is_none(self) -> None:
+        """A `None` mutation result (e.g. a `null` `CreateGoal`) raises."""
+        client = Mock()
+        ops = GraphQLOperations(client, GRAPHQL_URL)
+
+        with pytest.raises(GraphQLError, match="create goal failed"):
+            ops._require_created_id(None, label="goal")
+
+    def test_raises_when_id_is_zero(self) -> None:
+        """An `id` of `0` (e.g. a failed `CreateGoal` returning `IdModel(0)`) raises."""
+        client = Mock()
+        ops = GraphQLOperations(client, GRAPHQL_URL)
+
+        with pytest.raises(GraphQLError, match="create goal failed"):
+            ops._require_created_id({"id": 0}, label="goal")
 
 
 class TestCheckMutationResult:

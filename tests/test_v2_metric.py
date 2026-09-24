@@ -102,6 +102,15 @@ class TestMetricOperationsSync:
         assert result.goal == 100.0
         assert result.notes is None
 
+    def test_details_raises_when_metric_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `metric` is `null` (unknown id)."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"metric": None}})
+
+        with pytest.raises(GraphQLError, match="Metric 999999999 not found"):
+            ops.details(999999999)
+
     def test_list_meeting_filters_divider_and_sets_where(self) -> None:
         """`list(meeting_id=...)` filters DIVIDER rows and archived metrics."""
         client = Mock()
@@ -198,6 +207,17 @@ class TestMetricOperationsSync:
 
         create_vars = client.post.call_args_list[1].kwargs["json"]["variables"]
         assert create_vars["input"]["assignee"] == 1305290
+
+    def test_create_raises_when_create_metric_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateMetric` returns id `0`."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"CreateMetric": {"id": 0}}})
+
+        with pytest.raises(GraphQLError, match="create metric failed"):
+            ops.create(349524, "SDK v2 test metric", user_id=1305290, goal=100)
+
+        assert client.post.call_count == 1
 
     def test_create_with_notes_calls_create_note_first(self) -> None:
         """`create(notes=...)` calls `CreateNote` before `CreateMetric`."""
@@ -314,6 +334,24 @@ class TestMetricOperationsSync:
 
         assert len(result) == 1
         assert result[0].value == 123.0
+
+    def test_scores_keeps_zero_value(self) -> None:
+        """A score whose raw `value` is `0` is not dropped as an empty placeholder.
+
+        A truthiness check (`if node.get("value")`) would incorrectly treat a
+        legitimate `0` score the same as an empty placeholder (`""`/`None`).
+        """
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        zero_node = {**SCORE_NODE, "id": 1, "value": 0}
+        client.post.return_value = _response(
+            {"data": {"metric": {"scoresNonPaginated": [zero_node, EMPTY_SCORE_NODE]}}}
+        )
+
+        result = ops.scores(2036155)
+
+        assert len(result) == 1
+        assert result[0].value == 0.0
 
     def test_scores_include_empty(self) -> None:
         """`scores(include_empty=True)` keeps empty placeholder rows."""
@@ -694,6 +732,16 @@ class TestMetricOperationsAsync:
         assert isinstance(result, Metric)
 
     @pytest.mark.asyncio
+    async def test_details_raises_when_metric_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `metric` is `null`."""
+        client = AsyncMock()
+        ops = AsyncMetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"metric": None}})
+
+        with pytest.raises(GraphQLError, match="Metric 999999999 not found"):
+            await ops.details(999999999)
+
+    @pytest.mark.asyncio
     async def test_list_both_meeting_and_user_raises(self) -> None:
         """`list()` with both `meeting_id` and `user_id` raises `ValueError`."""
         client = AsyncMock()
@@ -783,6 +831,21 @@ class TestMetricOperationsAsync:
         result = await ops.scores(2036155)
 
         assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_scores_keeps_zero_value(self) -> None:
+        """A score whose raw `value` is `0` is not dropped as an empty placeholder."""
+        client = AsyncMock()
+        ops = AsyncMetricOperations(client, GRAPHQL_URL)
+        zero_node = {**SCORE_NODE, "id": 1, "value": 0}
+        client.post.return_value = _async_response(
+            {"data": {"metric": {"scoresNonPaginated": [zero_node, EMPTY_SCORE_NODE]}}}
+        )
+
+        result = await ops.scores(2036155)
+
+        assert len(result) == 1
+        assert result[0].value == 0.0
 
     @pytest.mark.asyncio
     async def test_set_score_success(self) -> None:
@@ -970,6 +1033,20 @@ class TestMetricOperationsAsync:
 
         create_vars = client.post.call_args_list[1].kwargs["json"]["variables"]
         assert create_vars["input"]["assignee"] == 1305290
+
+    @pytest.mark.asyncio
+    async def test_create_raises_when_create_metric_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateMetric` returns id `0`."""
+        client = AsyncMock()
+        ops = AsyncMetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response(
+            {"data": {"CreateMetric": {"id": 0}}}
+        )
+
+        with pytest.raises(GraphQLError, match="create metric failed"):
+            await ops.create(349524, "SDK v2 test metric", user_id=1305290, goal=100)
+
+        assert client.post.call_count == 1
 
     @pytest.mark.asyncio
     async def test_create_between_uses_min_max(self) -> None:

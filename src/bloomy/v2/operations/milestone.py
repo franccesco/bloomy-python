@@ -104,10 +104,12 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
     Note:
         The GraphQL API has no root `milestone(id)` query — a milestone can
         only be read through its parent goal (`goal(id){ milestones }`). So
-        `update()` and `complete()`, which need to re-read the milestone
-        after editing it, require `goal_id` in addition to `milestone_id`.
-        `delete()` does not, since `DeleteMilestone` does not return a
-        `Milestone`.
+        `update()` and `complete()` require `goal_id` (keyword-only) in
+        addition to `milestone_id`: both verify that `milestone_id` actually
+        belongs to `goal_id` *before* sending any edit (so a wrong `goal_id`
+        fails without writing anything), and need `goal_id` again to re-read
+        the milestone afterwards. `delete()` needs neither the verification
+        nor `goal_id`, since `DeleteMilestone` does not return a `Milestone`.
 
     """
 
@@ -164,13 +166,16 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
             "completed": completed,
         }
         data = self._execute(self._MILESTONE_CREATE_MUTATION, {"input": input_})
-        return self._get(goal_id, data["CreateMilestone"]["id"])
+        milestone_id = self._require_created_id(
+            data.get("CreateMilestone"), label="milestone"
+        )
+        return self._get(goal_id, milestone_id)
 
     def update(
         self,
         milestone_id: int,
-        goal_id: int,
         *,
+        goal_id: int,
         title: str | None = None,
         due_date: datetime | date | float | int | None = None,
         completed: bool | None = None,
@@ -179,8 +184,10 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
 
         Args:
             milestone_id: The ID of the milestone to update.
-            goal_id: The ID of the milestone's parent goal, needed to re-read
-                it afterwards (see the class `Note`).
+            goal_id: The ID of the milestone's parent goal. Keyword-only:
+                verified to actually own `milestone_id` (see the class
+                `Note`) *before* anything is written, and needed again to
+                re-read the milestone afterwards.
             title: New title for the milestone.
             due_date: New due date, as a `datetime`, `date`, or unix
                 timestamp (seconds).
@@ -194,13 +201,19 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
 
         Example:
             ```python
-            client.v2.milestone.update(1, 5265048, title="Draft spec v2")
+            client.v2.milestone.update(1, goal_id=5265048, title="Draft spec v2")
             # Returns: Milestone(id=1, title='Draft spec v2', ...)
             ```
 
         """
         if title is None and due_date is None and completed is None:
             raise ValueError("At least one field must be provided for update")
+
+        # Verify `milestone_id` actually belongs to `goal_id` before writing
+        # anything: without this, a wrong `goal_id` would still send
+        # `EditMilestone` and only report "not found" on the re-read after
+        # the write already happened.
+        self._get(goal_id, milestone_id)
 
         input_: dict[str, Any] = {"milestoneId": milestone_id}
         if title is not None:
@@ -213,18 +226,22 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
         self._execute(self._MILESTONE_EDIT_MUTATION, {"input": input_})
         return self._get(goal_id, milestone_id)
 
-    def complete(self, milestone_id: int, goal_id: int) -> Milestone:
+    def complete(self, milestone_id: int, *, goal_id: int) -> Milestone:
         """Mark a milestone as completed.
 
         Args:
             milestone_id: The ID of the milestone to complete.
-            goal_id: The ID of the milestone's parent goal, needed to re-read
-                it afterwards (see the class `Note`).
+            goal_id: The ID of the milestone's parent goal. Keyword-only:
+                verified to actually own `milestone_id` *before* anything is
+                written (see `update()`), and needed again to re-read the
+                milestone afterwards.
 
         Returns:
             The updated `Milestone`.
 
         """
+        self._get(goal_id, milestone_id)
+
         self._execute(
             self._MILESTONE_EDIT_MUTATION,
             {"input": {"milestoneId": milestone_id, "completed": True}},
@@ -322,13 +339,16 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
             "completed": completed,
         }
         data = await self._execute(self._MILESTONE_CREATE_MUTATION, {"input": input_})
-        return await self._get(goal_id, data["CreateMilestone"]["id"])
+        milestone_id = self._require_created_id(
+            data.get("CreateMilestone"), label="milestone"
+        )
+        return await self._get(goal_id, milestone_id)
 
     async def update(
         self,
         milestone_id: int,
-        goal_id: int,
         *,
+        goal_id: int,
         title: str | None = None,
         due_date: datetime | date | float | int | None = None,
         completed: bool | None = None,
@@ -337,8 +357,10 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
 
         Args:
             milestone_id: The ID of the milestone to update.
-            goal_id: The ID of the milestone's parent goal, needed to re-read
-                it afterwards (see the class `Note`).
+            goal_id: The ID of the milestone's parent goal. Keyword-only:
+                verified to actually own `milestone_id` (see the class
+                `Note`) *before* anything is written, and needed again to
+                re-read the milestone afterwards.
             title: New title for the milestone.
             due_date: New due date, as a `datetime`, `date`, or unix
                 timestamp (seconds).
@@ -354,6 +376,10 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
         if title is None and due_date is None and completed is None:
             raise ValueError("At least one field must be provided for update")
 
+        # Verify `milestone_id` actually belongs to `goal_id` before writing
+        # anything (see `MilestoneOperations.update`).
+        await self._get(goal_id, milestone_id)
+
         input_: dict[str, Any] = {"milestoneId": milestone_id}
         if title is not None:
             input_["title"] = title
@@ -365,18 +391,22 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
         await self._execute(self._MILESTONE_EDIT_MUTATION, {"input": input_})
         return await self._get(goal_id, milestone_id)
 
-    async def complete(self, milestone_id: int, goal_id: int) -> Milestone:
+    async def complete(self, milestone_id: int, *, goal_id: int) -> Milestone:
         """Mark a milestone as completed.
 
         Args:
             milestone_id: The ID of the milestone to complete.
-            goal_id: The ID of the milestone's parent goal, needed to re-read
-                it afterwards (see the class `Note`).
+            goal_id: The ID of the milestone's parent goal. Keyword-only:
+                verified to actually own `milestone_id` *before* anything is
+                written (see `update()`), and needed again to re-read the
+                milestone afterwards.
 
         Returns:
             The updated `Milestone`.
 
         """
+        await self._get(goal_id, milestone_id)
+
         await self._execute(
             self._MILESTONE_EDIT_MUTATION,
             {"input": {"milestoneId": milestone_id, "completed": True}},

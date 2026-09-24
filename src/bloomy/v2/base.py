@@ -23,6 +23,11 @@ Error handling contract (see `bloomy.exceptions.GraphQLError`):
     - Mutations shaped `{success message errorDetails{message}}` (the
       `GraphQLResponseOfBoolean`/`OfString`/`Base` family) raise
       `GraphQLError` when `success` is `false`, via `_check_mutation_result`.
+    - A by-id query returning `null` for the requested entity (unknown or
+      not visible to the caller), and a `Create*` mutation returning a
+      `null` result or an `id` of `0`, both raise `GraphQLError` via
+      `_require_entity`/`_require_created_id` rather than failing deep
+      inside a model/transform call.
 """
 
 from __future__ import annotations
@@ -94,6 +99,33 @@ def extract_notes(data: dict[str, Any]) -> str | None:
         local_html = data.get("localHtml") or ""
         text = html.unescape(_TAG_RE.sub("", local_html)).strip()
     return text or None
+
+
+def merge_nodes(
+    *node_lists: list[dict[str, Any]], date_field: str = "dateCreated"
+) -> list[dict[str, Any]]:
+    """Merge raw GraphQL node lists, deduping by id and sorting by creation date.
+
+    Used to combine the results of a single query that selects several
+    connections conditionally with `@include(if: ...)` (e.g. `issues` plus
+    `recentlySolvedIssues`/`archivedIssues`) into one ordered list, since each
+    connection is independently ordered but the combined result is not.
+
+    Args:
+        *node_lists: Raw node lists to merge, in any order.
+        date_field: The raw field name holding each node's creation
+            timestamp, used as the primary sort key.
+
+    Returns:
+        The merged nodes with each id appearing once (first occurrence
+        wins), sorted by `(date_field, id)`.
+
+    """
+    seen: dict[int, dict[str, Any]] = {}
+    for nodes in node_lists:
+        for node in nodes:
+            seen.setdefault(node["id"], node)
+    return sorted(seen.values(), key=lambda node: (node[date_field], node["id"]))
 
 
 def dig_nodes(data: dict[str, Any] | None, *keys: str) -> list[dict[str, Any]]:
@@ -214,6 +246,65 @@ class AbstractGraphQLOperations:
                 or f"{action} failed"
             )
             raise GraphQLError(message, errors=error_details)
+
+    # -- entity presence -------------------------------------------------------
+
+    @staticmethod
+    def _require_entity(
+        data: dict[str, Any], field: str, entity_id: int, label: str
+    ) -> dict[str, Any]:
+        """Get a required nested entity object from a GraphQL response, or raise.
+
+        A by-id query (e.g. `issue(id: $id)`) returns `null` for that field
+        instead of a top-level GraphQL error when the id is unknown or not
+        visible to the caller, so every `details()`-style read needs this
+        check before handing the raw object to a model/transform.
+
+        Args:
+            data: The raw GraphQL `data` object.
+            field: The key in `data` holding the entity object (e.g.
+                `"issue"`).
+            entity_id: The id that was requested, used in the error message.
+            label: A human-readable label for the entity (e.g. `"Issue"`).
+
+        Returns:
+            The entity object.
+
+        Raises:
+            GraphQLError: If `data[field]` is missing or `null`.
+
+        """
+        entity = data.get(field)
+        if not entity:
+            raise GraphQLError(f"{label} {entity_id} not found")
+        return entity
+
+    @staticmethod
+    def _require_created_id(result: dict[str, Any] | None, *, label: str) -> int:
+        """Get a newly created entity's id from a `Create*` mutation result, or raise.
+
+        Some v2 `Create*` mutations (e.g. `CreateGoal`) return `IdModel { id }`
+        and report a failure by returning a `null` result, or an `id` of `0`,
+        rather than a top-level GraphQL error -- re-reading id `0` would
+        otherwise surface as a confusing "not found" from the follow-up read.
+
+        Args:
+            result: The mutation's result object (e.g. `data["CreateGoal"]`).
+            label: A human-readable label for the entity being created, used
+                in the error message (e.g. `"goal"`).
+
+        Returns:
+            The newly created entity's id.
+
+        Raises:
+            GraphQLError: If `result` is missing, or its `id` is missing or
+                `0`.
+
+        """
+        entity_id = (result or {}).get("id")
+        if not entity_id:
+            raise GraphQLError(f"create {label} failed: no id returned")
+        return int(entity_id)
 
     # -- timestamps -----------------------------------------------------------
 

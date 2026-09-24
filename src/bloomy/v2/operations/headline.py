@@ -5,7 +5,13 @@ from __future__ import annotations
 import builtins
 from typing import Any
 
-from ..base import AsyncGraphQLOperations, GraphQLOperations, dig_nodes, extract_notes
+from ..base import (
+    AsyncGraphQLOperations,
+    GraphQLOperations,
+    dig_nodes,
+    extract_notes,
+    merge_nodes,
+)
 from ..models import Headline
 
 _HEADLINE_FIELDS = """
@@ -36,23 +42,21 @@ class HeadlineOperationsMixin:
     """
 
     # `meeting.headlines` returns only OPEN headlines (`CloseTime == null`);
-    # `meeting.archivedHeadlines` is a separate connection for archived ones.
+    # `meeting.archivedHeadlines` is a separate connection for archived ones,
+    # selected conditionally in this one document via `@include` so `list()`
+    # never issues more than one request. Verified live against production
+    # (`archivedHeadlines` is omitted from the response entirely when
+    # `$includeArchived` is `false`).
     _HEADLINE_MEETING_LIST_QUERY = f"""
-    query($meetingId: Long!) {{
+    query($meetingId: Long!, $includeArchived: Boolean!) {{
       meeting(id: $meetingId) {{
         headlines(order: [{{ dateCreated: ASC }}]) {{
           nodes {{
             {_HEADLINE_FIELDS}
           }}
         }}
-      }}
-    }}
-    """
-
-    _HEADLINE_MEETING_ARCHIVED_QUERY = f"""
-    query($meetingId: Long!) {{
-      meeting(id: $meetingId) {{
-        archivedHeadlines(order: [{{ dateCreated: ASC }}]) {{
+        archivedHeadlines(order: [{{ dateCreated: ASC }}])
+          @include(if: $includeArchived) {{
           nodes {{
             {_HEADLINE_FIELDS}
           }}
@@ -124,7 +128,9 @@ class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
 
         """
         data = self._execute(self._HEADLINE_DETAILS_QUERY, {"id": headline_id})
-        return self._transform_headline(data["headline"])
+        return self._transform_headline(
+            self._require_entity(data, "headline", headline_id, "Headline")
+        )
 
     def list(
         self,
@@ -161,15 +167,14 @@ class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
 
         if meeting_id is not None:
             data = self._execute(
-                self._HEADLINE_MEETING_LIST_QUERY, {"meetingId": meeting_id}
+                self._HEADLINE_MEETING_LIST_QUERY,
+                {"meetingId": meeting_id, "includeArchived": include_archived},
             )
-            nodes = dig_nodes(data, "meeting", "headlines")
-            if include_archived:
-                archived_data = self._execute(
-                    self._HEADLINE_MEETING_ARCHIVED_QUERY, {"meetingId": meeting_id}
-                )
-                nodes = nodes + dig_nodes(archived_data, "meeting", "archivedHeadlines")
-            return [self._transform_headline(node) for node in nodes]
+            merged = merge_nodes(
+                dig_nodes(data, "meeting", "headlines"),
+                dig_nodes(data, "meeting", "archivedHeadlines"),
+            )
+            return [self._transform_headline(node) for node in merged]
 
         if user_id is None:
             user_id = self.user_id
@@ -219,7 +224,10 @@ class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
             input_["collaborationEnabled"] = True
 
         data = self._execute(self._HEADLINE_CREATE_MUTATION, {"input": input_})
-        return self.details(data["CreateHeadline"]["id"])
+        headline_id = self._require_created_id(
+            data.get("CreateHeadline"), label="headline"
+        )
+        return self.details(headline_id)
 
     def update(
         self,
@@ -312,7 +320,9 @@ class AsyncHeadlineOperations(AsyncGraphQLOperations, HeadlineOperationsMixin):
 
         """
         data = await self._execute(self._HEADLINE_DETAILS_QUERY, {"id": headline_id})
-        return self._transform_headline(data["headline"])
+        return self._transform_headline(
+            self._require_entity(data, "headline", headline_id, "Headline")
+        )
 
     async def list(
         self,
@@ -343,15 +353,14 @@ class AsyncHeadlineOperations(AsyncGraphQLOperations, HeadlineOperationsMixin):
 
         if meeting_id is not None:
             data = await self._execute(
-                self._HEADLINE_MEETING_LIST_QUERY, {"meetingId": meeting_id}
+                self._HEADLINE_MEETING_LIST_QUERY,
+                {"meetingId": meeting_id, "includeArchived": include_archived},
             )
-            nodes = dig_nodes(data, "meeting", "headlines")
-            if include_archived:
-                archived_data = await self._execute(
-                    self._HEADLINE_MEETING_ARCHIVED_QUERY, {"meetingId": meeting_id}
-                )
-                nodes = nodes + dig_nodes(archived_data, "meeting", "archivedHeadlines")
-            return [self._transform_headline(node) for node in nodes]
+            merged = merge_nodes(
+                dig_nodes(data, "meeting", "headlines"),
+                dig_nodes(data, "meeting", "archivedHeadlines"),
+            )
+            return [self._transform_headline(node) for node in merged]
 
         if user_id is None:
             user_id = await self.get_user_id()
@@ -395,7 +404,10 @@ class AsyncHeadlineOperations(AsyncGraphQLOperations, HeadlineOperationsMixin):
             input_["collaborationEnabled"] = True
 
         data = await self._execute(self._HEADLINE_CREATE_MUTATION, {"input": input_})
-        return await self.details(data["CreateHeadline"]["id"])
+        headline_id = self._require_created_id(
+            data.get("CreateHeadline"), label="headline"
+        )
+        return await self.details(headline_id)
 
     async def update(
         self,

@@ -65,7 +65,7 @@ class UserOperations(GraphQLOperations, UserOperationsMixin):
             user_id = self.user_id
 
         data = self._execute(self._USER_DETAILS_QUERY, {"id": user_id})
-        return self._transform_user(data["user"])
+        return self._transform_user(self._require_entity(data, "user", user_id, "User"))
 
     def list(self) -> builtins.list[User]:
         """List every user in the organization.
@@ -101,7 +101,7 @@ class AsyncUserOperations(AsyncGraphQLOperations, UserOperationsMixin):
             user_id = await self.get_user_id()
 
         data = await self._execute(self._USER_DETAILS_QUERY, {"id": user_id})
-        return self._transform_user(data["user"])
+        return self._transform_user(self._require_entity(data, "user", user_id, "User"))
 
     async def list(self) -> builtins.list[User]:
         """List every user in the organization.

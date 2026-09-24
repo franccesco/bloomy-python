@@ -192,8 +192,8 @@ return-type documentation lives on each entity's API reference page.
 |---|---|---|
 | `list()` | `list(goal_id) -> list[Milestone]` | List a goal's milestones. |
 | `create()` | `create(goal_id, title, due_date, completed=False) -> Milestone` | Create a milestone on a goal. |
-| `update()` | `update(milestone_id, goal_id, *, title=None, due_date=None, completed=None) -> Milestone` | Update a milestone. Requires `goal_id` — see [below](#archive-vs-delete-semantics-per-entity). |
-| `complete()` | `complete(milestone_id, goal_id) -> Milestone` | Mark a milestone as completed. Requires `goal_id`. |
+| `update()` | `update(milestone_id, *, goal_id, title=None, due_date=None, completed=None) -> Milestone` | Update a milestone. Requires `goal_id` (keyword-only) — see [below](#archive-vs-delete-semantics-per-entity). |
+| `complete()` | `complete(milestone_id, *, goal_id) -> Milestone` | Mark a milestone as completed. Requires `goal_id` (keyword-only). |
 | `delete()` | `delete(milestone_id) -> None` | Delete a milestone. No `goal_id` needed. |
 
 ### `client.v2.metric`
@@ -255,7 +255,7 @@ archive/restore.
 | Headline | `archive()` / `restore()` | No complete/solve concept. |
 | Todo | `complete()` / `reopen()`, `archive()` / `restore()` | Independent flags: a to-do can be completed and archived at the same time. |
 | Goal | `archive()` / `restore()` | `archive()` re-reads the goal after the mutation and raises `GraphQLError` if it is still not archived, working around a server-side bug where the edit can report success without archiving anything. `restore()` re-attaches meeting links detached by a recent archive. |
-| Milestone | `delete()` | No archive/restore — `delete()` permanently removes it (soft-deleted server-side; it never reappears). There is no root query to read a milestone directly, which is why `update()` and `complete()` require both `milestone_id` and `goal_id`. |
+| Milestone | `delete()` | No archive/restore — `delete()` permanently removes it (soft-deleted server-side; it never reappears). There is no root query to read a milestone directly, which is why `update()` and `complete()` require both `milestone_id` and a keyword-only `goal_id`, which they verify actually owns `milestone_id` *before* writing anything. |
 | Metric | `archive()` | **No `restore()`.** The GraphQL API does not support un-archiving a metric — editing `archived: false` on an already-archived metric re-archives it rather than restoring it. Archiving a metric is effectively permanent through this SDK. |
 
 ## Metric scores and week semantics

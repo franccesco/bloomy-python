@@ -70,6 +70,15 @@ class TestIssueOperationsSync:
 
         assert result.owner is None
 
+    def test_details_raises_when_issue_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `issue` is `null` (unknown id)."""
+        client = Mock()
+        ops = IssueOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"issue": None}})
+
+        with pytest.raises(GraphQLError, match="Issue 999999999 not found"):
+            ops.details(999999999)
+
     @pytest.mark.parametrize(
         ("raw_archived", "long_term", "expected"),
         [
@@ -107,8 +116,11 @@ class TestIssueOperationsSync:
         result = ops.list(349524)
 
         assert len(result) == 1
+        assert client.post.call_count == 1
         variables = client.post.call_args.kwargs["json"]["variables"]
         assert variables["meetingId"] == 349524
+        assert variables["includeSolved"] is False
+        assert variables["includeArchived"] is False
         assert variables["where"] == {
             "and": [
                 {"addToDepartmentPlan": {"eq": False}},
@@ -136,46 +148,74 @@ class TestIssueOperationsSync:
         variables = client.post.call_args.kwargs["json"]["variables"]
         assert variables["where"] == {"and": [{"addToDepartmentPlan": {"eq": True}}]}
 
-    def test_list_include_solved_merges_and_dedupes(self) -> None:
-        """`include_solved=True` merges `recentlySolvedIssues`, deduping by id."""
+    def test_list_include_solved_merges_in_one_request(self) -> None:
+        """`include_solved=True` merges `recentlySolvedIssues` in a single request."""
         client = Mock()
         ops = IssueOperations(client, GRAPHQL_URL)
-        client.post.side_effect = [
-            _response({"data": {"meeting": {"issues": {"nodes": [ISSUE_NODE]}}}}),
-            _response(
-                {
-                    "data": {
-                        "meeting": {
-                            "recentlySolvedIssues": {
-                                "nodes": [{**ISSUE_NODE, "completed": True}]
-                            }
-                        }
+        solved_node = {**ISSUE_NODE, "id": 999, "completed": True}
+        client.post.return_value = _response(
+            {
+                "data": {
+                    "meeting": {
+                        "issues": {"nodes": [ISSUE_NODE]},
+                        "recentlySolvedIssues": {"nodes": [solved_node]},
                     }
                 }
-            ),
-        ]
+            }
+        )
 
         result = ops.list(349524, include_solved=True)
 
-        assert len(result) == 1
-        assert client.post.call_count == 2
+        assert client.post.call_count == 1
+        assert {issue.id for issue in result} == {ISSUE_NODE["id"], 999}
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables["includeSolved"] is True
+        assert variables["includeArchived"] is False
 
-    def test_list_include_archived(self) -> None:
-        """`include_archived=True` merges `archivedIssues`."""
+    def test_list_include_archived_merges_in_one_request(self) -> None:
+        """`include_archived=True` merges `archivedIssues` in a single request."""
         client = Mock()
         ops = IssueOperations(client, GRAPHQL_URL)
         archived_node = {**ISSUE_NODE, "id": 999, "archived": True}
-        client.post.side_effect = [
-            _response({"data": {"meeting": {"issues": {"nodes": []}}}}),
-            _response(
-                {"data": {"meeting": {"archivedIssues": {"nodes": [archived_node]}}}}
-            ),
-        ]
+        client.post.return_value = _response(
+            {
+                "data": {
+                    "meeting": {
+                        "issues": {"nodes": []},
+                        "archivedIssues": {"nodes": [archived_node]},
+                    }
+                }
+            }
+        )
 
         result = ops.list(349524, include_archived=True)
 
+        assert client.post.call_count == 1
         assert len(result) == 1
         assert result[0].id == 999
+
+    def test_list_dedupes_and_orders_by_creation_date(self) -> None:
+        """A node returned by more than one connection is deduped and re-sorted."""
+        client = Mock()
+        ops = IssueOperations(client, GRAPHQL_URL)
+        newer = {**ISSUE_NODE, "id": 3, "dateCreated": 300}
+        older = {**ISSUE_NODE, "id": 1, "dateCreated": 100}
+        duplicate_of_older = {**ISSUE_NODE, "id": 1, "dateCreated": 100}
+        client.post.return_value = _response(
+            {
+                "data": {
+                    "meeting": {
+                        "issues": {"nodes": [newer, older]},
+                        "recentlySolvedIssues": {"nodes": [duplicate_of_older]},
+                        "archivedIssues": {"nodes": []},
+                    }
+                }
+            }
+        )
+
+        result = ops.list(349524, include_solved=True, include_archived=True)
+
+        assert [issue.id for issue in result] == [1, 3]
 
     def test_create_without_notes(self) -> None:
         """`create()` without notes skips `CreateNote` and reads back details."""
@@ -231,6 +271,21 @@ class TestIssueOperationsSync:
 
         create_variables = client.post.call_args_list[1].kwargs["json"]["variables"]
         assert create_variables["input"]["ownerId"] == 1305290
+
+    def test_create_raises_when_create_issue_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateIssue` returns id `0`.
+
+        Rather than re-reading `details(0)`, which would confusingly report
+        "Issue 0 not found".
+        """
+        client = Mock()
+        ops = IssueOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"CreateIssue": {"id": 0}}})
+
+        with pytest.raises(GraphQLError, match="create issue failed"):
+            ops.create(349524, "SDK v2 test issue", user_id=1305290)
+
+        assert client.post.call_count == 1
 
     def test_update_no_fields_raises(self) -> None:
         """`update()` with no fields raises `ValueError`."""
@@ -357,6 +412,64 @@ class TestIssueOperationsAsync:
 
         assert result.id == 28471978
         assert result.notes == "some notes"
+
+    @pytest.mark.asyncio
+    async def test_details_raises_when_issue_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `issue` is `null` (unknown id)."""
+        client = AsyncMock()
+        ops = AsyncIssueOperations(client, GRAPHQL_URL)
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"data": {"issue": None}}
+        response.raise_for_status = MagicMock()
+        client.post.return_value = response
+
+        with pytest.raises(GraphQLError, match="Issue 999999999 not found"):
+            await ops.details(999999999)
+
+    @pytest.mark.asyncio
+    async def test_create_raises_when_create_issue_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateIssue` returns id `0`."""
+        client = AsyncMock()
+        ops = AsyncIssueOperations(client, GRAPHQL_URL)
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"data": {"CreateIssue": {"id": 0}}}
+        response.raise_for_status = MagicMock()
+        client.post.return_value = response
+
+        with pytest.raises(GraphQLError, match="create issue failed"):
+            await ops.create(349524, "SDK v2 test issue", user_id=1305290)
+
+        assert client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_list_include_solved_and_archived_merges_in_one_request(
+        self,
+    ) -> None:
+        """`list(include_solved=True, include_archived=True)` sends one request."""
+        client = AsyncMock()
+        ops = AsyncIssueOperations(client, GRAPHQL_URL)
+        solved_node = {**ISSUE_NODE, "id": 2, "completed": True}
+        archived_node = {**ISSUE_NODE, "id": 3, "archived": True}
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {
+            "data": {
+                "meeting": {
+                    "issues": {"nodes": [ISSUE_NODE]},
+                    "recentlySolvedIssues": {"nodes": [solved_node]},
+                    "archivedIssues": {"nodes": [archived_node]},
+                }
+            }
+        }
+        response.raise_for_status = MagicMock()
+        client.post.return_value = response
+
+        result = await ops.list(349524, include_solved=True, include_archived=True)
+
+        assert client.post.call_count == 1
+        assert {issue.id for issue in result} == {ISSUE_NODE["id"], 2, 3}
 
     @pytest.mark.asyncio
     async def test_update_no_fields_raises(self) -> None:

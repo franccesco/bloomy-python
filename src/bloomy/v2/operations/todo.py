@@ -148,7 +148,7 @@ class TodoOperations(GraphQLOperations, TodoOperationsMixin):
 
         """
         data = self._execute(self._TODO_DETAILS_QUERY, {"id": todo_id})
-        return self._transform_todo(data["todo"])
+        return self._transform_todo(self._require_entity(data, "todo", todo_id, "Todo"))
 
     def list(
         self,
@@ -255,7 +255,8 @@ class TodoOperations(GraphQLOperations, TodoOperationsMixin):
             input_["collaborationEnabled"] = True
 
         data = self._execute(self._TODO_CREATE_MUTATION, {"input": input_})
-        return self.details(data["CreateTodo"]["id"])
+        todo_id = self._require_created_id(data.get("CreateTodo"), label="todo")
+        return self.details(todo_id)
 
     def update(
         self,
@@ -408,7 +409,7 @@ class AsyncTodoOperations(AsyncGraphQLOperations, TodoOperationsMixin):
 
         """
         data = await self._execute(self._TODO_DETAILS_QUERY, {"id": todo_id})
-        return self._transform_todo(data["todo"])
+        return self._transform_todo(self._require_entity(data, "todo", todo_id, "Todo"))
 
     async def list(
         self,
@@ -503,7 +504,8 @@ class AsyncTodoOperations(AsyncGraphQLOperations, TodoOperationsMixin):
             input_["collaborationEnabled"] = True
 
         data = await self._execute(self._TODO_CREATE_MUTATION, {"input": input_})
-        return await self.details(data["CreateTodo"]["id"])
+        todo_id = self._require_created_id(data.get("CreateTodo"), label="todo")
+        return await self.details(todo_id)
 
     async def update(
         self,

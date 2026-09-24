@@ -73,6 +73,15 @@ class TestHeadlineOperationsSync:
 
         assert result.owner is None
 
+    def test_details_raises_when_headline_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `headline` is `null` (unknown id)."""
+        client = Mock()
+        ops = HeadlineOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"headline": None}})
+
+        with pytest.raises(GraphQLError, match="Headline 999999999 not found"):
+            ops.details(999999999)
+
     def test_list_both_meeting_and_user_raises(self) -> None:
         """`list()` with both `meeting_id` and `user_id` raises `ValueError`."""
         client = Mock()
@@ -94,26 +103,56 @@ class TestHeadlineOperationsSync:
         assert len(result) == 1
         assert client.post.call_count == 1
         variables = client.post.call_args.kwargs["json"]["variables"]
-        assert variables == {"meetingId": 349524}
+        assert variables == {"meetingId": 349524, "includeArchived": False}
 
-    def test_list_by_meeting_include_archived_merges(self) -> None:
-        """`list(meeting_id=..., include_archived=True)` merges `archivedHeadlines`."""
+    def test_list_by_meeting_include_archived_merges_in_one_request(self) -> None:
+        """`list(meeting_id=..., include_archived=True)` merges `archivedHeadlines`.
+
+        In a single request: the combined query selects `archivedHeadlines`
+        conditionally via `@include(if: $includeArchived)`.
+        """
         client = Mock()
         ops = HeadlineOperations(client, GRAPHQL_URL)
         archived_node = {**HEADLINE_NODE, "id": 999, "archived": True}
-        client.post.side_effect = [
-            _response({"data": {"meeting": {"headlines": {"nodes": [HEADLINE_NODE]}}}}),
-            _response(
-                {"data": {"meeting": {"archivedHeadlines": {"nodes": [archived_node]}}}}
-            ),
-        ]
+        client.post.return_value = _response(
+            {
+                "data": {
+                    "meeting": {
+                        "headlines": {"nodes": [HEADLINE_NODE]},
+                        "archivedHeadlines": {"nodes": [archived_node]},
+                    }
+                }
+            }
+        )
 
         result = ops.list(meeting_id=349524, include_archived=True)
 
-        assert client.post.call_count == 2
+        assert client.post.call_count == 1
         assert {headline.id for headline in result} == {987654, 999}
-        second_query = client.post.call_args_list[1].kwargs["json"]["query"]
-        assert "archivedHeadlines" in second_query
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables == {"meetingId": 349524, "includeArchived": True}
+
+    def test_list_by_meeting_dedupes_and_orders_by_creation_date(self) -> None:
+        """A node returned by both connections is deduped and re-sorted by date."""
+        client = Mock()
+        ops = HeadlineOperations(client, GRAPHQL_URL)
+        newer = {**HEADLINE_NODE, "id": 3, "dateCreated": 300}
+        older = {**HEADLINE_NODE, "id": 1, "dateCreated": 100}
+        duplicate_of_older = {**HEADLINE_NODE, "id": 1, "dateCreated": 100}
+        client.post.return_value = _response(
+            {
+                "data": {
+                    "meeting": {
+                        "headlines": {"nodes": [newer, older]},
+                        "archivedHeadlines": {"nodes": [duplicate_of_older]},
+                    }
+                }
+            }
+        )
+
+        result = ops.list(meeting_id=349524, include_archived=True)
+
+        assert [headline.id for headline in result] == [1, 3]
 
     def test_list_by_user_filters_archived_client_side(self) -> None:
         """`list(user_id=...)` drops archived headlines client-side by default.
@@ -217,6 +256,17 @@ class TestHeadlineOperationsSync:
 
         create_variables = client.post.call_args_list[1].kwargs["json"]["variables"]
         assert create_variables["input"]["assignee"] == 1305290
+
+    def test_create_raises_when_create_headline_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateHeadline` returns id `0`."""
+        client = Mock()
+        ops = HeadlineOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"CreateHeadline": {"id": 0}}})
+
+        with pytest.raises(GraphQLError, match="create headline failed"):
+            ops.create(349524, "SDK v2 test headline", user_id=1305290)
+
+        assert client.post.call_count == 1
 
     def test_update_no_fields_raises(self) -> None:
         """`update()` with no fields raises `ValueError`."""
@@ -507,10 +557,16 @@ class TestHeadlineOperationsSync:
         """`include_archived=True` handles a `null` `archivedHeadlines` connection."""
         client = Mock()
         ops = HeadlineOperations(client, GRAPHQL_URL)
-        client.post.side_effect = [
-            _response({"data": {"meeting": {"headlines": {"nodes": [HEADLINE_NODE]}}}}),
-            _response({"data": {"meeting": {"archivedHeadlines": None}}}),
-        ]
+        client.post.return_value = _response(
+            {
+                "data": {
+                    "meeting": {
+                        "headlines": {"nodes": [HEADLINE_NODE]},
+                        "archivedHeadlines": None,
+                    }
+                }
+            }
+        )
 
         result = ops.list(meeting_id=349524, include_archived=True)
 
@@ -647,6 +703,30 @@ class TestHeadlineOperationsAsync:
         assert result.owner is None
 
     @pytest.mark.asyncio
+    async def test_details_raises_when_headline_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `headline` is `null`."""
+        client = AsyncMock()
+        ops = AsyncHeadlineOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"headline": None}})
+
+        with pytest.raises(GraphQLError, match="Headline 999999999 not found"):
+            await ops.details(999999999)
+
+    @pytest.mark.asyncio
+    async def test_create_raises_when_create_headline_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateHeadline` returns id `0`."""
+        client = AsyncMock()
+        ops = AsyncHeadlineOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response(
+            {"data": {"CreateHeadline": {"id": 0}}}
+        )
+
+        with pytest.raises(GraphQLError, match="create headline failed"):
+            await ops.create(349524, "SDK v2 test headline", user_id=1305290)
+
+        assert client.post.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_details_transforms_timestamps_to_utc_aware_datetimes(self) -> None:
         """`created_date`/`archived_date` become timezone-aware UTC datetimes."""
         client = AsyncMock()
@@ -688,29 +768,37 @@ class TestHeadlineOperationsAsync:
         assert len(result) == 1
         assert client.post.call_count == 1
         variables = client.post.call_args.kwargs["json"]["variables"]
-        assert variables == {"meetingId": 349524}
+        assert variables == {"meetingId": 349524, "includeArchived": False}
 
     @pytest.mark.asyncio
-    async def test_list_by_meeting_include_archived_merges(self) -> None:
-        """`list(meeting_id=..., include_archived=True)` merges `archivedHeadlines`."""
+    async def test_list_by_meeting_include_archived_merges_in_one_request(
+        self,
+    ) -> None:
+        """`list(meeting_id=..., include_archived=True)` merges `archivedHeadlines`.
+
+        In a single request: the combined query selects `archivedHeadlines`
+        conditionally via `@include(if: $includeArchived)`.
+        """
         client = AsyncMock()
         ops = AsyncHeadlineOperations(client, GRAPHQL_URL)
         archived_node = {**HEADLINE_NODE, "id": 999, "archived": True}
-        client.post.side_effect = [
-            _async_response(
-                {"data": {"meeting": {"headlines": {"nodes": [HEADLINE_NODE]}}}}
-            ),
-            _async_response(
-                {"data": {"meeting": {"archivedHeadlines": {"nodes": [archived_node]}}}}
-            ),
-        ]
+        client.post.return_value = _async_response(
+            {
+                "data": {
+                    "meeting": {
+                        "headlines": {"nodes": [HEADLINE_NODE]},
+                        "archivedHeadlines": {"nodes": [archived_node]},
+                    }
+                }
+            }
+        )
 
         result = await ops.list(meeting_id=349524, include_archived=True)
 
-        assert client.post.call_count == 2
+        assert client.post.call_count == 1
         assert {headline.id for headline in result} == {987654, 999}
-        second_query = client.post.call_args_list[1].kwargs["json"]["query"]
-        assert "archivedHeadlines" in second_query
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables == {"meetingId": 349524, "includeArchived": True}
 
     @pytest.mark.asyncio
     async def test_list_by_meeting_returns_empty_when_meeting_is_null(self) -> None:

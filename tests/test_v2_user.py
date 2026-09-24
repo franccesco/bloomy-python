@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
+from bloomy.exceptions import GraphQLError
 from bloomy.v2.models import User
 from bloomy.v2.operations.user import AsyncUserOperations, UserOperations
 
@@ -64,6 +65,15 @@ class TestUserOperationsSync:
         assert result.id == 1305290
         client.post.assert_called_once()
 
+    def test_details_raises_when_user_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `user` is `null` (unknown id)."""
+        client = Mock()
+        ops = UserOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"user": None}})
+
+        with pytest.raises(GraphQLError, match="User 999999999 not found"):
+            ops.details(user_id=999999999)
+
     def test_list_returns_all_users(self) -> None:
         """`list()` returns every user from the `users` connection."""
         client = Mock()
@@ -106,6 +116,20 @@ class TestUserOperationsAsync:
 
         assert isinstance(result, User)
         assert result.id == 1305290
+
+    @pytest.mark.asyncio
+    async def test_details_raises_when_user_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `user` is `null`."""
+        client = AsyncMock()
+        ops = AsyncUserOperations(client, GRAPHQL_URL)
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"data": {"user": None}}
+        response.raise_for_status = MagicMock()
+        client.post.return_value = response
+
+        with pytest.raises(GraphQLError, match="User 999999999 not found"):
+            await ops.details(user_id=999999999)
 
     @pytest.mark.asyncio
     async def test_list_returns_all_users(self) -> None:

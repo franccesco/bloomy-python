@@ -11,6 +11,7 @@ from ..base import (
     GraphQLOperations,
     dig_nodes,
     extract_notes,
+    merge_nodes,
 )
 from ..models import Issue
 
@@ -49,11 +50,32 @@ class IssueOperationsMixin:
 
     # `meeting.issues` excludes solved and archived issues unconditionally
     # (it filters `CloseTime == null` server-side); `recentlySolvedIssues`
-    # and `archivedIssues` are separate connections for those.
+    # and `archivedIssues` are separate connections for those, selected
+    # conditionally in this one document via `@include` so `list()` never
+    # issues more than one request. Verified live against production
+    # (`recentlySolvedIssues`/`archivedIssues` are omitted from the response
+    # entirely when their `@include(if: ...)` variable is `false`).
     _ISSUE_LIST_QUERY = f"""
-    query($meetingId: Long!, $where: IssueQueryModelFilterInput) {{
+    query(
+      $meetingId: Long!
+      $where: IssueQueryModelFilterInput
+      $includeSolved: Boolean!
+      $includeArchived: Boolean!
+    ) {{
       meeting(id: $meetingId) {{
         issues(where: $where, order: [{{ dateCreated: ASC }}]) {{
+          nodes {{
+            {_ISSUE_FIELDS}
+          }}
+        }}
+        recentlySolvedIssues(where: $where, order: [{{ dateCreated: ASC }}])
+          @include(if: $includeSolved) {{
+          nodes {{
+            {_ISSUE_FIELDS}
+          }}
+        }}
+        archivedIssues(where: $where, order: [{{ dateCreated: ASC }}])
+          @include(if: $includeArchived) {{
           nodes {{
             {_ISSUE_FIELDS}
           }}
@@ -69,30 +91,6 @@ class IssueOperationsMixin:
     query($meetingId: Long!, $where: IssueQueryModelFilterInput) {{
       meeting(id: $meetingId) {{
         longTermIssues(where: $where, order: [{{ dateCreated: ASC }}]) {{
-          nodes {{
-            {_ISSUE_FIELDS}
-          }}
-        }}
-      }}
-    }}
-    """
-
-    _ISSUE_SOLVED_QUERY = f"""
-    query($meetingId: Long!, $where: IssueQueryModelFilterInput) {{
-      meeting(id: $meetingId) {{
-        recentlySolvedIssues(where: $where, order: [{{ dateCreated: ASC }}]) {{
-          nodes {{
-            {_ISSUE_FIELDS}
-          }}
-        }}
-      }}
-    }}
-    """
-
-    _ISSUE_ARCHIVED_QUERY = f"""
-    query($meetingId: Long!, $where: IssueQueryModelFilterInput) {{
-      meeting(id: $meetingId) {{
-        archivedIssues(where: $where, order: [{{ dateCreated: ASC }}]) {{
           nodes {{
             {_ISSUE_FIELDS}
           }}
@@ -171,7 +169,9 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
 
         """
         data = self._execute(self._ISSUE_DETAILS_QUERY, {"id": issue_id})
-        return self._transform_issue(data["issue"])
+        return self._transform_issue(
+            self._require_entity(data, "issue", issue_id, "Issue")
+        )
 
     def list(
         self,
@@ -211,26 +211,20 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
             return [self._transform_issue(node) for node in nodes]
 
         data = self._execute(
-            self._ISSUE_LIST_QUERY, {"meetingId": meeting_id, "where": where}
+            self._ISSUE_LIST_QUERY,
+            {
+                "meetingId": meeting_id,
+                "where": where,
+                "includeSolved": include_solved,
+                "includeArchived": include_archived,
+            },
         )
-        nodes = dig_nodes(data, "meeting", "issues")
-
-        if include_solved:
-            solved_data = self._execute(
-                self._ISSUE_SOLVED_QUERY, {"meetingId": meeting_id, "where": where}
-            )
-            nodes += dig_nodes(solved_data, "meeting", "recentlySolvedIssues")
-
-        if include_archived:
-            archived_data = self._execute(
-                self._ISSUE_ARCHIVED_QUERY, {"meetingId": meeting_id, "where": where}
-            )
-            nodes += dig_nodes(archived_data, "meeting", "archivedIssues")
-
-        seen: dict[int, dict[str, Any]] = {}
-        for node in nodes:
-            seen.setdefault(node["id"], node)
-        return [self._transform_issue(node) for node in seen.values()]
+        merged = merge_nodes(
+            dig_nodes(data, "meeting", "issues"),
+            dig_nodes(data, "meeting", "recentlySolvedIssues"),
+            dig_nodes(data, "meeting", "archivedIssues"),
+        )
+        return [self._transform_issue(node) for node in merged]
 
     def create(
         self,
@@ -275,7 +269,8 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
             input_["collaborationEnabled"] = True
 
         data = self._execute(self._ISSUE_CREATE_MUTATION, {"input": input_})
-        return self.details(data["CreateIssue"]["id"])
+        issue_id = self._require_created_id(data.get("CreateIssue"), label="issue")
+        return self.details(issue_id)
 
     def update(
         self,
@@ -442,7 +437,9 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
 
         """
         data = await self._execute(self._ISSUE_DETAILS_QUERY, {"id": issue_id})
-        return self._transform_issue(data["issue"])
+        return self._transform_issue(
+            self._require_entity(data, "issue", issue_id, "Issue")
+        )
 
     async def list(
         self,
@@ -476,26 +473,20 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
             return [self._transform_issue(node) for node in nodes]
 
         data = await self._execute(
-            self._ISSUE_LIST_QUERY, {"meetingId": meeting_id, "where": where}
+            self._ISSUE_LIST_QUERY,
+            {
+                "meetingId": meeting_id,
+                "where": where,
+                "includeSolved": include_solved,
+                "includeArchived": include_archived,
+            },
         )
-        nodes = dig_nodes(data, "meeting", "issues")
-
-        if include_solved:
-            solved_data = await self._execute(
-                self._ISSUE_SOLVED_QUERY, {"meetingId": meeting_id, "where": where}
-            )
-            nodes += dig_nodes(solved_data, "meeting", "recentlySolvedIssues")
-
-        if include_archived:
-            archived_data = await self._execute(
-                self._ISSUE_ARCHIVED_QUERY, {"meetingId": meeting_id, "where": where}
-            )
-            nodes += dig_nodes(archived_data, "meeting", "archivedIssues")
-
-        seen: dict[int, dict[str, Any]] = {}
-        for node in nodes:
-            seen.setdefault(node["id"], node)
-        return [self._transform_issue(node) for node in seen.values()]
+        merged = merge_nodes(
+            dig_nodes(data, "meeting", "issues"),
+            dig_nodes(data, "meeting", "recentlySolvedIssues"),
+            dig_nodes(data, "meeting", "archivedIssues"),
+        )
+        return [self._transform_issue(node) for node in merged]
 
     async def create(
         self,
@@ -534,7 +525,8 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
             input_["collaborationEnabled"] = True
 
         data = await self._execute(self._ISSUE_CREATE_MUTATION, {"input": input_})
-        return await self.details(data["CreateIssue"]["id"])
+        issue_id = self._require_created_id(data.get("CreateIssue"), label="issue")
+        return await self.details(issue_id)
 
     async def update(
         self,

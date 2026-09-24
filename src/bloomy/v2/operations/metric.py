@@ -332,7 +332,9 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
 
         """
         data = self._execute(self._METRIC_DETAILS_QUERY, {"id": metric_id})
-        return self._transform_metric(data["metric"])
+        return self._transform_metric(
+            self._require_entity(data, "metric", metric_id, "Metric")
+        )
 
     def list(
         self,
@@ -464,7 +466,8 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
             input_["collaborationEnabled"] = True
 
         data = self._execute(self._METRIC_CREATE_MUTATION, {"input": input_})
-        return self.details(data["CreateMetric"]["id"])
+        metric_id = self._require_created_id(data.get("CreateMetric"), label="metric")
+        return self.details(metric_id)
 
     def update(
         self,
@@ -596,7 +599,7 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
         )
         nodes = self._scores_from(data)
         if not include_empty:
-            nodes = [node for node in nodes if node.get("value")]
+            nodes = [node for node in nodes if node.get("value") not in (None, "")]
         return [self._transform_score(node) for node in nodes]
 
     def set_score(
@@ -777,7 +780,9 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
 
         """
         data = await self._execute(self._METRIC_DETAILS_QUERY, {"id": metric_id})
-        return self._transform_metric(data["metric"])
+        return self._transform_metric(
+            self._require_entity(data, "metric", metric_id, "Metric")
+        )
 
     async def list(
         self,
@@ -897,7 +902,8 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
             input_["collaborationEnabled"] = True
 
         data = await self._execute(self._METRIC_CREATE_MUTATION, {"input": input_})
-        return await self.details(data["CreateMetric"]["id"])
+        metric_id = self._require_created_id(data.get("CreateMetric"), label="metric")
+        return await self.details(metric_id)
 
     async def update(
         self,
@@ -1017,7 +1023,7 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
         )
         nodes = self._scores_from(data)
         if not include_empty:
-            nodes = [node for node in nodes if node.get("value")]
+            nodes = [node for node in nodes if node.get("value") not in (None, "")]
         return [self._transform_score(node) for node in nodes]
 
     async def set_score(

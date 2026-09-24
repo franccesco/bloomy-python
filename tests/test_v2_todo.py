@@ -121,6 +121,15 @@ class TestTodoOperationsSync:
             ops.details(555001)
         assert exc_info.value.status_code == 400
 
+    def test_details_raises_when_todo_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `todo` is `null` (unknown id)."""
+        client = Mock()
+        ops = TodoOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"todo": None}})
+
+        with pytest.raises(GraphQLError, match="Todo 999999999 not found"):
+            ops.details(999999999)
+
     def test_list_both_meeting_and_user_raises(self) -> None:
         """`list()` with both `meeting_id` and `user_id` raises `ValueError`."""
         client = Mock()
@@ -293,6 +302,17 @@ class TestTodoOperationsSync:
 
         create_variables = client.post.call_args_list[0].kwargs["json"]["variables"]
         assert create_variables["input"]["meetingRecurrenceId"] is None
+
+    def test_create_raises_when_create_todo_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateTodo` returns id `0`."""
+        client = Mock()
+        ops = TodoOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"CreateTodo": {"id": 0}}})
+
+        with pytest.raises(GraphQLError, match="create todo failed"):
+            ops.create("SDK v2 test to-do", user_id=1305290)
+
+        assert client.post.call_count == 1
 
     def test_create_with_explicit_due_date(self) -> None:
         """`create(due_date=...)` converts the given date to a unix timestamp."""
@@ -629,6 +649,16 @@ class TestTodoOperationsAsync:
         assert result.meeting is None
 
     @pytest.mark.asyncio
+    async def test_details_raises_when_todo_is_null(self) -> None:
+        """`details()` raises `GraphQLError` when `todo` is `null`."""
+        client = AsyncMock()
+        ops = AsyncTodoOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"todo": None}})
+
+        with pytest.raises(GraphQLError, match="Todo 999999999 not found"):
+            await ops.details(999999999)
+
+    @pytest.mark.asyncio
     async def test_details_datetime_fields_are_utc_aware(self) -> None:
         """Timestamp fields convert into timezone-aware UTC datetimes."""
         client = AsyncMock()
@@ -803,6 +833,18 @@ class TestTodoOperationsAsync:
 
         create_variables = client.post.call_args_list[0].kwargs["json"]["variables"]
         assert create_variables["input"]["meetingRecurrenceId"] is None
+
+    @pytest.mark.asyncio
+    async def test_create_raises_when_create_todo_id_is_zero(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateTodo` returns id `0`."""
+        client = AsyncMock()
+        ops = AsyncTodoOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"CreateTodo": {"id": 0}}})
+
+        with pytest.raises(GraphQLError, match="create todo failed"):
+            await ops.create("SDK v2 test to-do", user_id=1305290)
+
+        assert client.post.call_count == 1
 
     @pytest.mark.asyncio
     async def test_create_with_explicit_due_date(self) -> None:

@@ -160,12 +160,12 @@ class TestGoalMilestoneLifecycleSync:
             assert new_milestone.completed is False
 
             renamed = client.v2.milestone.update(
-                new_milestone.id, created.id, title="Second milestone (renamed)"
+                new_milestone.id, goal_id=created.id, title="Second milestone (renamed)"
             )
             assert renamed.title == "Second milestone (renamed)"
 
             completed_milestone = client.v2.milestone.complete(
-                new_milestone.id, created.id
+                new_milestone.id, goal_id=created.id
             )
             assert completed_milestone.completed is True
 
@@ -222,7 +222,7 @@ class TestGoalMilestoneLifecycleSync:
     def test_milestone_update_requires_a_field(self, client: Client) -> None:
         """Milestone `update()` with no fields raises `ValueError`."""
         with pytest.raises(ValueError, match="At least one field"):
-            client.v2.milestone.update(1, 1)
+            client.v2.milestone.update(1, goal_id=1)
 
 
 class TestGoalMilestoneLifecycleAsync:
@@ -257,7 +257,7 @@ class TestGoalMilestoneLifecycleAsync:
             assert milestone.goal_id == created.id
 
             completed_milestone = await async_client.v2.milestone.complete(
-                milestone.id, created.id
+                milestone.id, goal_id=created.id
             )
             assert completed_milestone.completed is True
 
@@ -285,4 +285,4 @@ class TestGoalMilestoneLifecycleAsync:
     ) -> None:
         """Milestone `update()` with no fields raises `ValueError`."""
         with pytest.raises(ValueError, match="At least one field"):
-            await async_client.v2.milestone.update(1, 1)
+            await async_client.v2.milestone.update(1, goal_id=1)

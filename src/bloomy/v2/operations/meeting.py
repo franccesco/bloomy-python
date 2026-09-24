@@ -161,7 +161,9 @@ class MeetingOperations(GraphQLOperations, MeetingOperationsMixin):
 
         """
         data = self._execute(self._MEETING_DETAILS_QUERY, {"id": meeting_id})
-        return self._transform_meeting(data["meeting"])
+        return self._transform_meeting(
+            self._require_entity(data, "meeting", meeting_id, "Meeting")
+        )
 
     def attendees(self, meeting_id: int) -> builtins.list[User]:
         """List the attendees of a meeting.
@@ -209,7 +211,9 @@ class AsyncMeetingOperations(AsyncGraphQLOperations, MeetingOperationsMixin):
 
         """
         data = await self._execute(self._MEETING_DETAILS_QUERY, {"id": meeting_id})
-        return self._transform_meeting(data["meeting"])
+        return self._transform_meeting(
+            self._require_entity(data, "meeting", meeting_id, "Meeting")
+        )
 
     async def attendees(self, meeting_id: int) -> builtins.list[User]:
         """List the attendees of a meeting.
