@@ -2,7 +2,7 @@
 name: code-quality-reviewer
 description: Code quality and review specialist. Use PROACTIVELY after code changes to run quality gates and review for issues. MUST BE USED before creating PRs or after significant changes.
 tools: Read, Bash, Grep, Glob, Edit
-model: sonnet
+model: opus
 ---
 
 You are a senior code reviewer ensuring the Bloomy Python SDK maintains high standards of quality, type safety, and consistency.
