@@ -188,6 +188,43 @@ client.headline.update(headline_id=456, title="Updated headline")
 client.headline.delete(headline_id=456)
 ```
 
+## v2: The GraphQL API
+
+`client.v2` is a new namespace that talks to Bloom Growth's GraphQL API
+instead of the REST API `client.v1` (and the top-level attributes above) use.
+It shares the same client instance, the same API key, and covers the same
+entities — users, meetings, issues, headlines, todos, goals, milestones, and
+metrics — plus a few things v1 doesn't have, like milestones as their own
+resource.
+
+```python
+from bloomy import Client
+
+client = Client(api_key="your-api-key-here")
+
+# v1 (REST) — unchanged
+meetings = client.meeting.list()
+
+# v2 (GraphQL) — new
+meeting = client.v2.meeting.details(meetings[0].id)
+issues = client.v2.issue.list(meeting.id)
+
+issue = client.v2.issue.create(meeting.id, "New issue", notes="Details")
+client.v2.issue.solve(issue.id)
+
+goal = client.v2.goal.create(meeting.id, "Ship v2")
+client.v2.milestone.create(goal.id, "Draft spec", due_date="2026-01-01")
+
+metric = client.v2.metric.create(meeting.id, "New Customers", goal=10)
+client.v2.metric.set_score(metric.id, 12, "2026-09-21")
+```
+
+v2 raises `GraphQLError` (a subclass of `APIError`) instead of a plain
+`APIError`, and its models (`bloomy.v2.models`) are separate classes from the
+v1 ones. See the [v2 guide](https://franccesco.github.io/bloomy-python/guide/v2-graphql-api/)
+for the full tour, including description/notes behavior, archive-vs-delete
+semantics per entity, and metric score/week semantics.
+
 ## Configuration
 
 The SDK supports multiple ways to provide your API key:

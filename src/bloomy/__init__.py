@@ -5,7 +5,13 @@ import importlib.metadata
 from .async_client import AsyncClient
 from .client import Client
 from .configuration import Configuration
-from .exceptions import APIError, AuthenticationError, BloomyError, ConfigurationError
+from .exceptions import (
+    APIError,
+    AuthenticationError,
+    BloomyError,
+    ConfigurationError,
+    GraphQLError,
+)
 from .models import (
     ArchivedGoalInfo,
     BulkCreateError,
@@ -64,6 +70,7 @@ __all__ = [
     "GoalInfo",
     "GoalListResponse",
     "GoalStatus",
+    "GraphQLError",
     "Headline",
     "HeadlineDetails",
     "HeadlineInfo",

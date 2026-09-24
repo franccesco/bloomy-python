@@ -97,11 +97,12 @@ nav:
       - Basic Usage: guide/usage.md
       - Bulk Operations: guide/bulk-operations.md
       - Async Support: guide/async.md
+      - "v2: The GraphQL API": guide/v2-graphql-api.md
       - Error Handling: guide/errors.md
   - API Reference:
       - Client: api/client.md
       - AsyncClient: api/async_client.md
-      - Operations:
+      - v1 Operations:
           - Users: api/operations/users.md
           - Meetings: api/operations/meetings.md
           - Todos: api/operations/todos.md
@@ -109,6 +110,16 @@ nav:
           - Scorecard: api/operations/scorecard.md
           - Issues: api/operations/issues.md
           - Headlines: api/operations/headlines.md
+      - v2 Operations:
+          - Users: api/v2/user.md
+          - Meetings: api/v2/meeting.md
+          - Issues: api/v2/issue.md
+          - Headlines: api/v2/headline.md
+          - Todos: api/v2/todo.md
+          - Goals: api/v2/goal.md
+          - Milestones: api/v2/milestone.md
+          - Metrics: api/v2/metric.md
+      - v2 Models: api/v2/models.md
       - Configuration: api/configuration.md
       - Exceptions: api/exceptions.md
 
