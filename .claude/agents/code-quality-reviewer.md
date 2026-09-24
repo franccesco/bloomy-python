@@ -38,7 +38,7 @@ uv run mkdocs build --strict
 
 ## Tool Configuration
 
-Ruff and basedpyright settings (rule selection, line length, strict mode, `src/`-only type checking) live in `pyproject.toml`; read them there. CI (`.github/workflows/quality.yml`) runs `ruff format . --check`, `ruff check .`, and `basedpyright`.
+Ruff and basedpyright settings (rule selection, line length, strict mode, `src/`-only type checking) live in `pyproject.toml`, and the CI checks are in `.github/workflows/quality.yml`. Consult them when a rule or setting is in question.
 
 ## Code Review Checklist
 

@@ -37,7 +37,6 @@ class NewFeatureModel(BloomyBaseModel):
 ```
 
 **Step 2: Create a Transform Mixin** (`src/bloomy/operations/mixins/<feature>_transform.py`)
-- Put response-to-model transformation here so the sync and async classes share it
 
 **Step 3: Create Sync and Async Operations** (`src/bloomy/operations/<feature>.py`, `src/bloomy/operations/async_/<feature>.py`)
 - Each class inherits its base class and the mixin: `class FeatureOperations(BaseOperations, FeatureOperationsMixin)`
@@ -72,8 +71,8 @@ Always use the BloomyError hierarchy:
 ## Quality Checklist Before Completion
 
 - [ ] Pydantic model defined with proper aliases
-- [ ] Sync operations class created
-- [ ] Async operations class created (mirrors sync exactly)
+- [ ] Transform mixin created
+- [ ] Sync and async operations classes created, each inheriting its base class and the mixin (async mirrors sync exactly)
 - [ ] Both clients updated with new attribute
 - [ ] All `__init__.py` exports updated
 - [ ] Google-style docstrings on all public methods

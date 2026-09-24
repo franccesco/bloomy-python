@@ -48,7 +48,7 @@ fix(async): resolve race condition in concurrent requests
 
 docs(guide): add async bulk operations documentation
 
-chore: bump version to 0.19.0
+chore(release): bump version to 0.19.0
 ```
 
 ## Version Management
@@ -61,8 +61,6 @@ chore: bump version to 0.19.0
 - **MAJOR** (X.0.0): Breaking API changes
 - **MINOR** (0.X.0): New features, backward compatible
 - **PATCH** (0.0.X): Bug fixes, backward compatible
-
-Version bumps follow the Release Process below.
 
 ## Changelog Management
 
@@ -173,21 +171,19 @@ uv run basedpyright
 uv run pytest
 uv run mkdocs build --strict
 
-# 3. Verify all tests pass
-# 4. Review recent commits for changelog
+# 3. Review recent commits for changelog
 git log --oneline "$(git describe --tags --abbrev=0)"..HEAD
 ```
 
 ### Release Steps
 
-The release commit goes through a PR like any other change (see Safety Rules); tag the merged commit on `main`.
+The release commit goes through a PR like any other change (see Safety Rules).
 
 ```bash
-# 1. On a branch, update CHANGELOG.md
-#    - Move items from [Unreleased] to new version section: ## [X.Y.Z] - YYYY-MM-DD
-#    - Update comparison links at bottom
-# 2. Update version in pyproject.toml: version = "X.Y.Z"
+# 1. Create the release branch
 git checkout -b chore/release-vX.Y.Z
+
+# 2. Update CHANGELOG.md (see "During Release" above) and set version = "X.Y.Z" in pyproject.toml
 git add CHANGELOG.md pyproject.toml
 git commit -m "chore(release): bump version to X.Y.Z"
 git push -u origin chore/release-vX.Y.Z

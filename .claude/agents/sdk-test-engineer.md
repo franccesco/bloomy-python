@@ -54,16 +54,11 @@ uv run pytest --cov=bloomy --cov-report=term-missing
 
 ## Fixtures (from conftest.py)
 
-### HTTP Client Mocks
-```python
-@pytest.fixture
-def mock_response() -> Mock:
-    """Mock(spec=httpx.Response) with is_success=True, status_code=200."""
+Read `tests/conftest.py` for exact signatures.
 
-@pytest.fixture
-def mock_http_client(mock_response: Mock) -> Mock:
-    """Mock httpx.Client whose methods return mock_response."""
-```
+### HTTP Client Mocks
+- `mock_response`: a mocked `httpx.Response` that reports success
+- `mock_http_client`: a mocked `httpx.Client` whose methods return `mock_response`
 
 ### Sample Data Fixtures
 ```python
@@ -79,14 +74,7 @@ def sample_meeting_data() -> dict[str, Any]:
 ```
 
 ### User ID Mock (Important!)
-```python
-@pytest.fixture
-def mock_user_id() -> Generator[PropertyMock, None, None]:
-    """Patches BaseOperations.user_id to return 123.
-
-    Prevents lazy-loading API calls to /users/mine.
-    """
-```
+`mock_user_id` patches `BaseOperations.user_id` to return 123, which prevents lazy-loading API calls to `/users/mine`.
 
 ## Sync Test Pattern
 
