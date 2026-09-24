@@ -40,7 +40,7 @@ uv run pytest
 uv run pytest tests/test_users.py
 
 # Run specific test
-uv run pytest tests/test_users.py::TestUserOperations::test_details -v
+uv run pytest tests/test_users.py::TestUserOperations::test_details_basic -v
 
 # Run with verbose output
 uv run pytest -v
@@ -57,12 +57,12 @@ uv run pytest --cov=bloomy --cov-report=term-missing
 ### HTTP Client Mocks
 ```python
 @pytest.fixture
-def mock_http_client() -> Mock:
-    """Mock httpx.Client for sync tests."""
+def mock_response() -> Mock:
+    """Mock(spec=httpx.Response) with is_success=True, status_code=200."""
 
 @pytest.fixture
-def mock_response() -> Mock:
-    """Mock httpx.Response."""
+def mock_http_client(mock_response: Mock) -> Mock:
+    """Mock httpx.Client whose methods return mock_response."""
 ```
 
 ### Sample Data Fixtures
@@ -81,8 +81,11 @@ def sample_meeting_data() -> dict[str, Any]:
 ### User ID Mock (Important!)
 ```python
 @pytest.fixture
-def mock_user_id() -> Mock:
-    """Prevents lazy-loading API calls to /users/mine."""
+def mock_user_id() -> Generator[PropertyMock, None, None]:
+    """Patches BaseOperations.user_id to return 123.
+
+    Prevents lazy-loading API calls to /users/mine.
+    """
 ```
 
 ## Sync Test Pattern
