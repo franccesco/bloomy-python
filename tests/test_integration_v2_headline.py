@@ -143,6 +143,14 @@ class TestHeadlineLifecycleSync:
             )
             assert any(h.id == created.id for h in archived_list)
 
+            open_by_user = client.v2.headline.list(user_id=created.owner.id)
+            assert all(h.id != created.id for h in open_by_user)
+            assert all(h.archived is False for h in open_by_user)
+            all_by_user = client.v2.headline.list(
+                user_id=created.owner.id, include_archived=True
+            )
+            assert any(h.id == created.id and h.archived for h in all_by_user)
+
             restored = client.v2.headline.restore(created.id)
             assert restored.archived is False
         finally:
@@ -151,7 +159,9 @@ class TestHeadlineLifecycleSync:
 
     def test_list_requires_at_most_one_of_meeting_or_user(self, client: Client) -> None:
         """`list()` with both `meeting_id` and `user_id` raises `ValueError`."""
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(
+            ValueError, match="Cannot specify both meeting_id and user_id"
+        ):
             client.v2.headline.list(meeting_id=MEETING_ID, user_id=1305290)
 
     def test_update_requires_a_field(self, client: Client) -> None:

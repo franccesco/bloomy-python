@@ -1,73 +1,70 @@
 """Pydantic models for the Bloomy v2 (GraphQL) API.
 
-Conventions (apply these uniformly to models added for other v2 entities —
-headline, todo, goal, milestone, metric):
+Conventions for v2 models:
 
-- **Aliases are camelCase**, matching the GraphQL field names verbatim
-  (`Field(alias="dateCreated")`), unlike v1's PascalCase REST aliases. Since
-  GraphQL response shapes already map ~1:1 onto these models, operation
-  mixins build most models by spreading the raw response dict as keyword
-  arguments (`Model(**data, notes=computed_notes)`), relying on
-  `BloomyBaseModel`'s `validate_by_alias=True` to do the field mapping and
-  on Pydantic's default `extra="ignore"` to drop unmapped raw keys (e.g.
-  `notesText`, `collaborationEnabled`). This works cleanly for `Issue`
-  (see `IssueOperationsMixin._transform_issue`), whose fields all come from
-  one flat response object. Where a mixin instead reshapes a nested
-  connection by hand (e.g. `Meeting.attendees`, or flattening a nested
-  `user { email }` onto `User`, in `MeetingOperationsMixin._transform_*`),
-  construct the model with **alias keyword names**
-  (`User(firstName=..., fullName=...)`), not the snake_case field names:
-  Pydantic's generated `__init__` exposes the alias — not the field name —
-  to static type checkers whenever `Field(alias=...)` is set, even though
-  `validate_by_name=True` also accepts the field name at runtime. Mixing the
-  two (spreading a raw dict vs. hand-building kwargs) is fine; mixing
-  aliases and field names *within one call* is not checked by pydantic and
-  will silently pass `None`/defaults for the field-name-spelled arguments.
-- **Owners are nested refs**: an entity's assignee is exposed as
-  `owner: UserRef | None` (aliased from the GraphQL `assignee` field), never
-  flattened into `owner_id`/`owner_name`. `owner` is optional because
-  `assignee` can be `null` (e.g. unowned issues).
-- **Related entities are nested refs** too: an `Issue`'s parent meeting is
-  `meeting: MeetingRef | None` (aliased from GraphQL `meeting`), not
-  flattened `meeting_id`/`meeting_name`. Reuse `MeetingRef`/`UserRef` for
-  this rather than inventing new ref types per entity.
-- **Datetimes use the `_date` suffix** (`created_date`, `due_date`,
-  `completed_date`, `archived_date`) and are always timezone-aware UTC
-  `datetime` objects, converted from the API's unix-seconds floats via the
-  `GqlDatetime`/`GqlOptionalDatetime` annotated types. This mirrors v1's
-  `_date` naming and lines up with the public API's `due_date` parameters.
-- **Notes**: description text is exposed as `notes: str | None`, computed by
-  `bloomy.v2.base.extract_notes` from the raw
-  `notesText`/`localHtml`/`collaborationEnabled` projection. `notes_id` is
-  kept alongside it (aliased from `notesId`) since it is needed to update
-  the description later (see `v2/base.py`).
+- Aliases are the camelCase GraphQL field names; operations build every model
+  with `Model.model_validate` on the raw GraphQL object.
+- Owners and related entities are nested refs: `owner: UserRef | None`
+  (aliased from `assignee`, which can be `null`) and `meeting: MeetingRef |
+  None`, never flattened ids/names.
+- Datetimes use the `_date` suffix and are timezone-aware UTC `datetime`
+  objects, converted from the API's unix-seconds floats.
+- `notes` is the plain description text, computed from the `NOTES_FIELDS`
+  projection (see `bloomy.v2.base.extract_notes`); `notes_id` is the pad id
+  needed to update it.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
-from pydantic import BeforeValidator, Field
+from pydantic import (
+    AliasChoices,
+    AliasPath,
+    BeforeValidator,
+    Field,
+    model_validator,
+)
 
 from ..models import BloomyBaseModel, OptionalFloat
+from .base import extract_notes, to_utc_datetime
 
 
 def _parse_gql_datetime(value: Any) -> datetime | None:
-    """Convert a GraphQL unix-seconds timestamp into a timezone-aware datetime.
+    """Convert a GraphQL unix-seconds timestamp into an aware UTC datetime.
 
     Returns:
         The converted datetime, or `None` if `value` is `None`.
 
     """
+    return None if value is None else to_utc_datetime(value)
+
+
+def _connection_nodes(value: Any) -> Any:
+    """Unwrap a GraphQL connection (`{"nodes": [...]}`) into its node list.
+
+    Returns:
+        The node list (`[]` for `null`), or `value` unchanged if it is not a
+        connection object.
+
+    """
     if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-    if isinstance(value, date):
-        return datetime(value.year, value.month, value.day, tzinfo=UTC)
-    return datetime.fromtimestamp(float(value), tz=UTC)
+        return []
+    if isinstance(value, dict):
+        return cast("dict[str, Any]", value).get("nodes") or []
+    return value
+
+
+def _raw_dict(data: Any) -> dict[str, Any] | None:
+    """Narrow a `mode="before"` validator's input to a raw GraphQL object.
+
+    Returns:
+        `data` if it is a dict, else `None`.
+
+    """
+    return cast("dict[str, Any]", data) if isinstance(data, dict) else None
 
 
 # Reusable annotated types for the v2 API's unix-seconds timestamps.
@@ -75,9 +72,33 @@ type GqlDatetime = Annotated[datetime, BeforeValidator(_parse_gql_datetime)]
 type GqlOptionalDatetime = Annotated[
     datetime | None, BeforeValidator(_parse_gql_datetime)
 ]
+# A nested connection (`field { nodes { ... } }`), validated as a plain list.
+type Connection[T] = Annotated[list[T], BeforeValidator(_connection_nodes)]
 
 
-class UserRef(BloomyBaseModel):
+class GqlBaseModel(BloomyBaseModel):
+    """Base model for v2 entities, validated from raw GraphQL objects.
+
+    Fields validate by alias (the raw GraphQL key) or by field name, so
+    `Model.model_validate(model.model_dump())` round-trips.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fill_notes(cls, data: Any) -> Any:
+        """Compute `notes` when the raw object carries the `NOTES_FIELDS`.
+
+        Returns:
+            The raw object, with `notes` added when applicable.
+
+        """
+        raw = _raw_dict(data)
+        if raw is not None and "collaborationEnabled" in raw:
+            return {**raw, "notes": extract_notes(raw)}
+        return data
+
+
+class UserRef(GqlBaseModel):
     """Minimal reference to a user, as nested inside other v2 entities.
 
     This is what GraphQL `assignee { id fullName }` projections return; use
@@ -88,7 +109,7 @@ class UserRef(BloomyBaseModel):
     full_name: str | None = Field(default=None, alias="fullName")
 
 
-class MeetingRef(BloomyBaseModel):
+class MeetingRef(GqlBaseModel):
     """Minimal reference to a meeting, as nested inside other v2 entities.
 
     This is what GraphQL `meeting { id name }` projections return; use
@@ -99,18 +120,21 @@ class MeetingRef(BloomyBaseModel):
     name: str | None = None
 
 
-class User(BloomyBaseModel):
+class User(GqlBaseModel):
     """Model for a full v2 user, from the `user`/`users` queries."""
 
     id: int
     first_name: str | None = Field(default=None, alias="firstName")
     last_name: str | None = Field(default=None, alias="lastName")
     full_name: str | None = Field(default=None, alias="fullName")
-    email: str | None = None
+    email: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("email", AliasPath("user", "email")),
+    )
     avatar: str | None = None
 
 
-class MeetingListItem(BloomyBaseModel):
+class MeetingListItem(GqlBaseModel):
     """Model for a meeting list item, from `user(id){ meetingsListLookup }`."""
 
     id: int
@@ -122,7 +146,7 @@ class MeetingListItem(BloomyBaseModel):
     is_current_user_admin: bool = Field(default=False, alias="isCurrentUserAdmin")
 
 
-class Meeting(BloomyBaseModel):
+class Meeting(GqlBaseModel):
     """Model for full meeting details, from the `meeting(id)` query."""
 
     id: int
@@ -131,10 +155,10 @@ class Meeting(BloomyBaseModel):
     meeting_type: str | None = Field(default=None, alias="meetingType")
     created_date: GqlDatetime = Field(alias="createdTimestamp")
     archived: bool = False
-    attendees: list[User] = Field(default_factory=list)
+    attendees: Connection[User] = Field(default_factory=list)
 
 
-class Issue(BloomyBaseModel):
+class Issue(GqlBaseModel):
     """Model for an issue, from the `issue(id)`/`meeting(id){ issues }` queries."""
 
     id: int
@@ -156,8 +180,26 @@ class Issue(BloomyBaseModel):
     num_star_votes: int = Field(default=0, alias="numStarVotes")
     issue_number: int | None = Field(default=None, alias="issueNumber")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _long_term_is_not_archived(cls, data: Any) -> Any:
+        """Report a long-term issue as not archived.
 
-class Headline(BloomyBaseModel):
+        The API stores every long-term issue as archived, while the web app
+        lists them on the Long-Term tab; archiving a long-term issue clears
+        `addToDepartmentPlan`, so it then counts as archived.
+
+        Returns:
+            The raw object, with `archived` cleared for a long-term issue.
+
+        """
+        raw = _raw_dict(data)
+        if raw is not None and raw.get("addToDepartmentPlan"):
+            return {**raw, "archived": False}
+        return data
+
+
+class Headline(GqlBaseModel):
     """Model for a headline, from `headline(id)`/`meeting(id){ headlines }` queries."""
 
     id: int
@@ -172,8 +214,8 @@ class Headline(BloomyBaseModel):
     created_date: GqlDatetime = Field(alias="dateCreated")
 
 
-class Todo(BloomyBaseModel):
-    """Model for a to-do, from the `todo(id)`/`meeting(id){ todos }` queries."""
+class Todo(GqlBaseModel):
+    """Model for a to-do, from the `todo(id)` query and the to-do list queries."""
 
     id: int
     title: str | None = None
@@ -203,7 +245,7 @@ class GoalStatus(StrEnum):
     COMPLETED = "COMPLETED"
 
 
-class Milestone(BloomyBaseModel):
+class Milestone(GqlBaseModel):
     """Model for a goal milestone, from `goal(id){ milestones }`.
 
     There is no root `milestone(id)` query in the GraphQL API: a milestone is
@@ -219,7 +261,7 @@ class Milestone(BloomyBaseModel):
     created_date: GqlOptionalDatetime = Field(default=None, alias="dateCreated")
 
 
-class Goal(BloomyBaseModel):
+class Goal(GqlBaseModel):
     """Model for a goal (rock), from the `goal(id)`/`goals(userId)` queries."""
 
     id: int
@@ -232,8 +274,8 @@ class Goal(BloomyBaseModel):
     created_date: GqlDatetime = Field(alias="dateCreated")
     notes_id: str | None = Field(default=None, alias="notesId")
     notes: str | None = None
-    milestones: list[Milestone] = Field(default_factory=list)
-    meetings: list[MeetingRef] = Field(default_factory=list)
+    milestones: Connection[Milestone] = Field(default_factory=list)
+    meetings: Connection[MeetingRef] = Field(default_factory=list)
 
 
 class MetricUnit(StrEnum):
@@ -280,7 +322,7 @@ class MetricFrequency(StrEnum):
     DAILY = "DAILY"
 
 
-class Metric(BloomyBaseModel):
+class Metric(GqlBaseModel):
     """Model for a metric (KPI), from the `metric(id)`/`meeting(id){ metrics }` queries.
 
     `id` is always the Measurable id (aliased from `measurableId`). On
@@ -305,7 +347,7 @@ class Metric(BloomyBaseModel):
     is_externally_synced: bool = Field(default=False, alias="isExternallySynced")
 
 
-class MetricScore(BloomyBaseModel):
+class MetricScore(GqlBaseModel):
     """Model for a metric score, from `metric(id){ scoresNonPaginated }`.
 
     There is no root `score(id)` query: a score is only reachable through
@@ -316,4 +358,6 @@ class MetricScore(BloomyBaseModel):
     metric_id: int = Field(alias="measurableId")
     value: OptionalFloat = None
     week_date: GqlOptionalDatetime = Field(default=None, alias="timestamp")
-    notes: str | None = None
+    notes: Annotated[str | None, BeforeValidator(lambda value: value or None)] = Field(
+        default=None, validation_alias="notesText"
+    )

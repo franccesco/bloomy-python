@@ -89,6 +89,14 @@ class TestUserOperationsSync:
         assert result[0].id == 1305290
         assert result[1].full_name == "Scout Bloom"
 
+    def test_list_null_connection_returns_empty(self) -> None:
+        """`list()` returns `[]` when the `users` connection is `null`."""
+        client = Mock()
+        ops = UserOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"users": None}})
+
+        assert ops.list() == []
+
 
 class TestUserOperationsAsync:
     """Tests for the async `AsyncUserOperations`."""
@@ -146,3 +154,15 @@ class TestUserOperationsAsync:
 
         assert len(result) == 1
         assert result[0].id == 1305290
+
+    @pytest.mark.asyncio
+    async def test_details_explicit_user_id(self) -> None:
+        """`details(user_id=...)` skips the current-user lookup."""
+        client = AsyncMock()
+        ops = AsyncUserOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"user": USER_NODE}})
+
+        result = await ops.details(user_id=1305290)
+
+        assert result.email == "fran@example.com"
+        client.post.assert_called_once()

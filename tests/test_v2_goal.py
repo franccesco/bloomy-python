@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
 from bloomy.exceptions import GraphQLError
+from bloomy.v2.base import MILESTONES_CONNECTION
 from bloomy.v2.models import Goal, GoalStatus
 from bloomy.v2.operations.goal import AsyncGoalOperations, GoalOperations
 
@@ -157,8 +158,12 @@ class TestGoalOperationsSync:
         client = Mock()
         ops = GoalOperations(client, GRAPHQL_URL)
 
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(
+            ValueError, match="Cannot specify both meeting_id and user_id"
+        ):
             ops.list(meeting_id=349524, user_id=1305290)
+
+        assert client.post.call_count == 0
 
     def test_create_defaults(self) -> None:
         """`create()` defaults the due date to 90 days out and attaches the meeting."""
@@ -252,6 +257,8 @@ class TestGoalOperationsSync:
             milestones=[
                 {"title": "M1", "due_date": 1767225600},
                 ("M2", 1767225600, True),
+                {"title": "M3", "due_date": date(2026, 1, 1), "completed": True},
+                ("M4", datetime(2026, 1, 1, tzinfo=UTC)),
             ],
         )
 
@@ -260,6 +267,8 @@ class TestGoalOperationsSync:
         assert milestones == [
             {"title": "M1", "dueDate": 1767225600.0, "completed": False},
             {"title": "M2", "dueDate": 1767225600.0, "completed": True},
+            {"title": "M3", "dueDate": 1767225600.0, "completed": True},
+            {"title": "M4", "dueDate": 1767225600.0, "completed": False},
         ]
 
     def test_create_defaults_user_id_to_current_user(self) -> None:
@@ -419,7 +428,61 @@ class TestGoalOperationsSync:
 
         assert result == []
 
-    def test_transform_goal_with_missing_milestones_and_meetings(self) -> None:
+    def test_details_with_null_milestones_and_meetings(self) -> None:
+        """`null` `milestones`/`meetings` connections validate as empty lists."""
+        client = Mock()
+        ops = GoalOperations(client, GRAPHQL_URL)
+        node = {**GOAL_NODE, "milestones": None, "meetings": None}
+        client.post.return_value = _response({"data": {"goal": node}})
+
+        result = ops.details(5265048)
+
+        assert result.milestones == []
+        assert result.meetings == []
+
+    def test_details_query_selects_milestones_like_milestone_list(self) -> None:
+        """The goal query filters and orders milestones as `milestone.list()` does."""
+        client = Mock()
+        ops = GoalOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"goal": GOAL_NODE}})
+
+        ops.details(5265048)
+
+        sent_query = client.post.call_args.kwargs["json"]["query"]
+        assert MILESTONES_CONNECTION in sent_query
+        assert "dateDeleted: { eq: null }" in MILESTONES_CONNECTION
+
+    def test_update_notes_only(self) -> None:
+        """`update(notes=...)` alone is a valid update and sends only the pad."""
+        client = Mock()
+        ops = GoalOperations(client, GRAPHQL_URL)
+        client.post.side_effect = [
+            _response({"data": {"CreateNote": {"success": True, "data": "pad-5"}}}),
+            _response({"data": {"EditGoal": {"id": 5265048}}}),
+            _response({"data": {"goal": GOAL_NODE}}),
+        ]
+
+        ops.update(5265048, notes="Only notes")
+
+        edit_input = client.post.call_args_list[1].kwargs["json"]["variables"]["input"]
+        assert edit_input == {
+            "goalId": 5265048,
+            "notesId": "pad-5",
+            "collaborationEnabled": True,
+        }
+
+    def test_update_raises_when_edit_goal_returns_null(self) -> None:
+        """A `null` `EditGoal` result raises `GraphQLError` without a re-read."""
+        client = Mock()
+        ops = GoalOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"EditGoal": None}})
+
+        with pytest.raises(GraphQLError, match="update goal failed"):
+            ops.update(5265048, title="New title")
+
+        assert client.post.call_count == 1
+
+    def test_details_without_milestones_and_meetings(self) -> None:
         """A goal payload without `milestones`/`meetings` keys yields empty lists."""
         client = Mock()
         ops = GoalOperations(client, GRAPHQL_URL)
@@ -521,8 +584,40 @@ class TestGoalOperationsAsync:
         client = AsyncMock()
         ops = AsyncGoalOperations(client, GRAPHQL_URL)
 
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(
+            ValueError, match="Cannot specify both meeting_id and user_id"
+        ):
             await ops.list(meeting_id=349524, user_id=1305290)
+
+        assert client.post.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_list_by_user_include_archived(self) -> None:
+        """`list(user_id=..., include_archived=True)` skips the auth lookup."""
+        client = AsyncMock()
+        ops = AsyncGoalOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response(
+            {"data": {"user": {"goals": {"nodes": [GOAL_NODE]}}}}
+        )
+
+        result = await ops.list(user_id=1305290, include_archived=True)
+
+        assert [goal.id for goal in result] == [5265048]
+        assert client.post.call_count == 1
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables == {"userId": 1305290, "where": None}
+
+    @pytest.mark.asyncio
+    async def test_update_raises_when_edit_goal_returns_null(self) -> None:
+        """A `null` `EditGoal` result raises `GraphQLError` without a re-read."""
+        client = AsyncMock()
+        ops = AsyncGoalOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"EditGoal": None}})
+
+        with pytest.raises(GraphQLError, match="restore goal failed"):
+            await ops.restore(5265048)
+
+        assert client.post.call_count == 1
 
     @pytest.mark.asyncio
     async def test_list_by_meeting(self) -> None:

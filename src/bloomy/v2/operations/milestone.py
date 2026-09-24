@@ -3,43 +3,29 @@
 from __future__ import annotations
 
 import builtins
-from datetime import date, datetime
 from typing import Any
 
-from ...exceptions import GraphQLError
 from ..base import (
+    MILESTONE_FIELDS,
+    MILESTONES_CONNECTION,
     MUTATION_RESULT_FIELDS,
     AsyncGraphQLOperations,
     GraphQLOperations,
+    TimeInput,
+    compact,
     dig_nodes,
+    to_timestamp,
 )
 from ..models import Milestone
 
-#: Selected on every milestone read. Kept in sync with `goal.py`'s inline
-#: milestone subselection (duplicated rather than imported, to keep the two
-#: entity modules independent).
-_MILESTONE_FIELDS = "id goalId title dueDate completed status dateCreated"
-
 
 class MilestoneOperationsMixin:
-    """Shared GraphQL documents and response transforms for milestone operations."""
+    """GraphQL documents, inputs, and parsing shared by milestone operations."""
 
-    # There is no root `milestone(id)` query (see module docstring on
-    # `MilestoneOperations`), so both the list and the by-id read go through
-    # `goal(id){ milestones(...) }`. `dateDeleted` is already filtered
-    # server-side (soft-deleted milestones are never returned), but the
-    # explicit filter is kept for parity with the web app's own query.
     _MILESTONE_LIST_QUERY = f"""
     query($goalId: Long!) {{
       goal(id: $goalId) {{
-        milestones(
-          where: {{ and: [{{ dateDeleted: {{ eq: null }} }}] }}
-          order: [{{ dueDate: ASC }}]
-        ) {{
-          nodes {{
-            {_MILESTONE_FIELDS}
-          }}
-        }}
+        {MILESTONES_CONNECTION}
       }}
     }}
     """
@@ -49,19 +35,13 @@ class MilestoneOperationsMixin:
       goal(id: $goalId) {{
         milestones(where: {{ id: {{ eq: $milestoneId }} }}) {{
           nodes {{
-            {_MILESTONE_FIELDS}
+            {MILESTONE_FIELDS}
           }}
         }}
       }}
     }}
     """
 
-    # CreateMilestone/EditMilestone return only `IdModel { id }` (verified
-    # live against production), not the `{success message errorDetails}`
-    # shape `_run_mutation` expects. A failed create/edit raises through the
-    # standard `errors` array instead (an invalid input, e.g. a bad `status`
-    # string, throws server-side and surfaces there), so these are executed
-    # with plain `_execute`.
     _MILESTONE_CREATE_MUTATION = """
     mutation($input: MilestoneCreateModelInput!) {
       CreateMilestone(input: $input) {
@@ -78,8 +58,6 @@ class MilestoneOperationsMixin:
     }
     """
 
-    # DeleteMilestone genuinely returns `GraphQLResponseBase`
-    # (`{success message errorDetails}`), unlike Create/EditMilestone.
     _MILESTONE_DELETE_MUTATION = f"""
     mutation($milestoneId: Long!) {{
       DeleteMilestone(milestoneId: $milestoneId) {{
@@ -88,28 +66,68 @@ class MilestoneOperationsMixin:
     }}
     """
 
-    def _transform_milestone(self, data: dict[str, Any]) -> Milestone:
-        """Transform a raw GraphQL milestone object into a `Milestone` model.
+    @staticmethod
+    def _milestones_from(data: dict[str, Any]) -> list[Milestone]:
+        """Validate the milestones of a `_MILESTONE_LIST_QUERY` response.
 
         Returns:
-            A `Milestone` model instance.
+            The milestones, ordered by due date (empty for an unknown goal).
 
         """
-        return Milestone(**data)
+        return [
+            Milestone.model_validate(node)
+            for node in dig_nodes(data, "goal", "milestones")
+        ]
+
+    @staticmethod
+    def _milestone_create_input(
+        *,
+        goal_id: int,
+        title: str,
+        due_date: TimeInput,
+        completed: bool,
+    ) -> dict[str, Any]:
+        """Build the `MilestoneCreateModelInput` fields.
+
+        Returns:
+            The input fields.
+
+        """
+        return {
+            "rockId": goal_id,
+            "title": title,
+            "dueDate": to_timestamp(due_date),
+            "completed": completed,
+        }
+
+    @staticmethod
+    def _milestone_edit_fields(
+        *,
+        title: str | None,
+        due_date: TimeInput | None,
+        completed: bool | None,
+    ) -> dict[str, Any]:
+        """Build the `MilestoneEditModelInput` fields that were given.
+
+        Returns:
+            The non-`None` input fields.
+
+        """
+        return compact(
+            title=title,
+            dueDate=None if due_date is None else to_timestamp(due_date),
+            completed=completed,
+        )
 
 
 class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
     """Class to handle v2 (GraphQL) operations related to goal milestones.
 
     Note:
-        The GraphQL API has no root `milestone(id)` query — a milestone can
-        only be read through its parent goal (`goal(id){ milestones }`). So
-        `update()` and `complete()` require `goal_id` (keyword-only) in
-        addition to `milestone_id`: both verify that `milestone_id` actually
-        belongs to `goal_id` *before* sending any edit (so a wrong `goal_id`
-        fails without writing anything), and need `goal_id` again to re-read
-        the milestone afterwards. `delete()` needs neither the verification
-        nor `goal_id`, since `DeleteMilestone` does not return a `Milestone`.
+        The GraphQL API has no root `milestone(id)` query, so a milestone is
+        read through its parent goal. `update()` and `complete()` therefore
+        take `goal_id`: they check that `milestone_id` belongs to that goal
+        before writing anything, then re-read the milestone through it.
 
     """
 
@@ -129,15 +147,15 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
             ```
 
         """
-        data = self._execute(self._MILESTONE_LIST_QUERY, {"goalId": goal_id})
-        nodes = dig_nodes(data, "goal", "milestones")
-        return [self._transform_milestone(node) for node in nodes]
+        return self._milestones_from(
+            self._execute(self._MILESTONE_LIST_QUERY, {"goalId": goal_id})
+        )
 
     def create(
         self,
         goal_id: int,
         title: str,
-        due_date: datetime | date | float | int,
+        due_date: TimeInput,
         completed: bool = False,
     ) -> Milestone:
         """Create a new milestone on a goal.
@@ -159,17 +177,16 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
             ```
 
         """
-        input_: dict[str, Any] = {
-            "rockId": goal_id,
-            "title": title,
-            "dueDate": self._to_timestamp(due_date),
-            "completed": completed,
-        }
-        data = self._execute(self._MILESTONE_CREATE_MUTATION, {"input": input_})
-        milestone_id = self._require_created_id(
-            data.get("CreateMilestone"), label="milestone"
+        input_ = self._milestone_create_input(
+            goal_id=goal_id, title=title, due_date=due_date, completed=completed
         )
-        return self._get(goal_id, milestone_id)
+        result = self._mutate(
+            self._MILESTONE_CREATE_MUTATION,
+            {"input": input_},
+            root_field="CreateMilestone",
+            action="create milestone",
+        )
+        return self._get(goal_id, result["id"])
 
     def update(
         self,
@@ -177,17 +194,15 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
         *,
         goal_id: int,
         title: str | None = None,
-        due_date: datetime | date | float | int | None = None,
+        due_date: TimeInput | None = None,
         completed: bool | None = None,
     ) -> Milestone:
         """Update an existing milestone.
 
         Args:
             milestone_id: The ID of the milestone to update.
-            goal_id: The ID of the milestone's parent goal. Keyword-only:
-                verified to actually own `milestone_id` (see the class
-                `Note`) *before* anything is written, and needed again to
-                re-read the milestone afterwards.
+            goal_id: The ID of the milestone's parent goal (see the class
+                `Note`).
             title: New title for the milestone.
             due_date: New due date, as a `datetime`, `date`, or unix
                 timestamp (seconds).
@@ -206,24 +221,19 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
             ```
 
         """
-        if title is None and due_date is None and completed is None:
+        fields = self._milestone_edit_fields(
+            title=title, due_date=due_date, completed=completed
+        )
+        if not fields:
             raise ValueError("At least one field must be provided for update")
-
-        # Verify `milestone_id` actually belongs to `goal_id` before writing
-        # anything: without this, a wrong `goal_id` would still send
-        # `EditMilestone` and only report "not found" on the re-read after
-        # the write already happened.
+        # Checks that the milestone belongs to `goal_id` before writing.
         self._get(goal_id, milestone_id)
-
-        input_: dict[str, Any] = {"milestoneId": milestone_id}
-        if title is not None:
-            input_["title"] = title
-        if due_date is not None:
-            input_["dueDate"] = self._to_timestamp(due_date)
-        if completed is not None:
-            input_["completed"] = completed
-
-        self._execute(self._MILESTONE_EDIT_MUTATION, {"input": input_})
+        self._mutate(
+            self._MILESTONE_EDIT_MUTATION,
+            {"input": {"milestoneId": milestone_id, **fields}},
+            root_field="EditMilestone",
+            action="update milestone",
+        )
         return self._get(goal_id, milestone_id)
 
     def complete(self, milestone_id: int, *, goal_id: int) -> Milestone:
@@ -231,22 +241,14 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
 
         Args:
             milestone_id: The ID of the milestone to complete.
-            goal_id: The ID of the milestone's parent goal. Keyword-only:
-                verified to actually own `milestone_id` *before* anything is
-                written (see `update()`), and needed again to re-read the
-                milestone afterwards.
+            goal_id: The ID of the milestone's parent goal (see the class
+                `Note`).
 
         Returns:
             The updated `Milestone`.
 
         """
-        self._get(goal_id, milestone_id)
-
-        self._execute(
-            self._MILESTONE_EDIT_MUTATION,
-            {"input": {"milestoneId": milestone_id, "completed": True}},
-        )
-        return self._get(goal_id, milestone_id)
+        return self.update(milestone_id, goal_id=goal_id, completed=True)
 
     def delete(self, milestone_id: int) -> None:
         """Delete (soft-delete) a milestone.
@@ -260,7 +262,7 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
             ```
 
         """
-        self._run_mutation(
+        self._mutate(
             self._MILESTONE_DELETE_MUTATION,
             {"milestoneId": milestone_id},
             root_field="DeleteMilestone",
@@ -268,25 +270,22 @@ class MilestoneOperations(GraphQLOperations, MilestoneOperationsMixin):
         )
 
     def _get(self, goal_id: int, milestone_id: int) -> Milestone:
-        """Re-read a single milestone through its parent goal.
+        """Read a single milestone through its parent goal.
 
         Returns:
-            The `Milestone` model instance.
-
-        Raises:
-            GraphQLError: If the milestone is not found under the goal.
+            The `Milestone` model instance. `_one` raises `GraphQLError` if
+            the goal has no such milestone.
 
         """
         data = self._execute(
             self._MILESTONE_BY_ID_QUERY,
             {"goalId": goal_id, "milestoneId": milestone_id},
         )
-        nodes = dig_nodes(data, "goal", "milestones")
-        if not nodes:
-            raise GraphQLError(
-                f"milestone {milestone_id} not found under goal {goal_id}"
+        return Milestone.model_validate(
+            self._one(
+                data, "goal", "milestones", label="Milestone", entity_id=milestone_id
             )
-        return self._transform_milestone(nodes[0])
+        )
 
 
 class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin):
@@ -308,15 +307,15 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
             A list of `Milestone` model instances, ordered by due date.
 
         """
-        data = await self._execute(self._MILESTONE_LIST_QUERY, {"goalId": goal_id})
-        nodes = dig_nodes(data, "goal", "milestones")
-        return [self._transform_milestone(node) for node in nodes]
+        return self._milestones_from(
+            await self._execute(self._MILESTONE_LIST_QUERY, {"goalId": goal_id})
+        )
 
     async def create(
         self,
         goal_id: int,
         title: str,
-        due_date: datetime | date | float | int,
+        due_date: TimeInput,
         completed: bool = False,
     ) -> Milestone:
         """Create a new milestone on a goal.
@@ -332,17 +331,16 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
             The newly created `Milestone`.
 
         """
-        input_: dict[str, Any] = {
-            "rockId": goal_id,
-            "title": title,
-            "dueDate": self._to_timestamp(due_date),
-            "completed": completed,
-        }
-        data = await self._execute(self._MILESTONE_CREATE_MUTATION, {"input": input_})
-        milestone_id = self._require_created_id(
-            data.get("CreateMilestone"), label="milestone"
+        input_ = self._milestone_create_input(
+            goal_id=goal_id, title=title, due_date=due_date, completed=completed
         )
-        return await self._get(goal_id, milestone_id)
+        result = await self._mutate(
+            self._MILESTONE_CREATE_MUTATION,
+            {"input": input_},
+            root_field="CreateMilestone",
+            action="create milestone",
+        )
+        return await self._get(goal_id, result["id"])
 
     async def update(
         self,
@@ -350,17 +348,15 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
         *,
         goal_id: int,
         title: str | None = None,
-        due_date: datetime | date | float | int | None = None,
+        due_date: TimeInput | None = None,
         completed: bool | None = None,
     ) -> Milestone:
         """Update an existing milestone.
 
         Args:
             milestone_id: The ID of the milestone to update.
-            goal_id: The ID of the milestone's parent goal. Keyword-only:
-                verified to actually own `milestone_id` (see the class
-                `Note`) *before* anything is written, and needed again to
-                re-read the milestone afterwards.
+            goal_id: The ID of the milestone's parent goal (see the class
+                `Note`).
             title: New title for the milestone.
             due_date: New due date, as a `datetime`, `date`, or unix
                 timestamp (seconds).
@@ -373,22 +369,19 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
             ValueError: If no update fields are provided.
 
         """
-        if title is None and due_date is None and completed is None:
+        fields = self._milestone_edit_fields(
+            title=title, due_date=due_date, completed=completed
+        )
+        if not fields:
             raise ValueError("At least one field must be provided for update")
-
-        # Verify `milestone_id` actually belongs to `goal_id` before writing
-        # anything (see `MilestoneOperations.update`).
+        # Checks that the milestone belongs to `goal_id` before writing.
         await self._get(goal_id, milestone_id)
-
-        input_: dict[str, Any] = {"milestoneId": milestone_id}
-        if title is not None:
-            input_["title"] = title
-        if due_date is not None:
-            input_["dueDate"] = self._to_timestamp(due_date)
-        if completed is not None:
-            input_["completed"] = completed
-
-        await self._execute(self._MILESTONE_EDIT_MUTATION, {"input": input_})
+        await self._mutate(
+            self._MILESTONE_EDIT_MUTATION,
+            {"input": {"milestoneId": milestone_id, **fields}},
+            root_field="EditMilestone",
+            action="update milestone",
+        )
         return await self._get(goal_id, milestone_id)
 
     async def complete(self, milestone_id: int, *, goal_id: int) -> Milestone:
@@ -396,22 +389,14 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
 
         Args:
             milestone_id: The ID of the milestone to complete.
-            goal_id: The ID of the milestone's parent goal. Keyword-only:
-                verified to actually own `milestone_id` *before* anything is
-                written (see `update()`), and needed again to re-read the
-                milestone afterwards.
+            goal_id: The ID of the milestone's parent goal (see the class
+                `Note`).
 
         Returns:
             The updated `Milestone`.
 
         """
-        await self._get(goal_id, milestone_id)
-
-        await self._execute(
-            self._MILESTONE_EDIT_MUTATION,
-            {"input": {"milestoneId": milestone_id, "completed": True}},
-        )
-        return await self._get(goal_id, milestone_id)
+        return await self.update(milestone_id, goal_id=goal_id, completed=True)
 
     async def delete(self, milestone_id: int) -> None:
         """Delete (soft-delete) a milestone.
@@ -420,7 +405,7 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
             milestone_id: The ID of the milestone to delete.
 
         """
-        await self._run_mutation(
+        await self._mutate(
             self._MILESTONE_DELETE_MUTATION,
             {"milestoneId": milestone_id},
             root_field="DeleteMilestone",
@@ -428,22 +413,19 @@ class AsyncMilestoneOperations(AsyncGraphQLOperations, MilestoneOperationsMixin)
         )
 
     async def _get(self, goal_id: int, milestone_id: int) -> Milestone:
-        """Re-read a single milestone through its parent goal.
+        """Read a single milestone through its parent goal.
 
         Returns:
-            The `Milestone` model instance.
-
-        Raises:
-            GraphQLError: If the milestone is not found under the goal.
+            The `Milestone` model instance. `_one` raises `GraphQLError` if
+            the goal has no such milestone.
 
         """
         data = await self._execute(
             self._MILESTONE_BY_ID_QUERY,
             {"goalId": goal_id, "milestoneId": milestone_id},
         )
-        nodes = dig_nodes(data, "goal", "milestones")
-        if not nodes:
-            raise GraphQLError(
-                f"milestone {milestone_id} not found under goal {goal_id}"
+        return Milestone.model_validate(
+            self._one(
+                data, "goal", "milestones", label="Milestone", entity_id=milestone_id
             )
-        return self._transform_milestone(nodes[0])
+        )

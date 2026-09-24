@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 import builtins
-from typing import Any
 
 from ..base import AsyncGraphQLOperations, GraphQLOperations, dig_nodes
 from ..models import Meeting, MeetingListItem, User
 
+_ATTENDEES_FIELD = """
+attendees(order: [{ fullName: ASC }]) {
+  nodes {
+    id
+    firstName
+    lastName
+    fullName
+    avatar
+    user { email }
+  }
+}
+"""
+
 
 class MeetingOperationsMixin:
-    """Shared GraphQL documents and response transforms for meeting operations."""
+    """GraphQL documents shared by meeting operations."""
 
     # `user(id){ meetingsListLookup }` is used instead of the root `meetings`
     # field, which is expensive and can trip the server's execution timeout.
@@ -35,8 +47,6 @@ class MeetingOperationsMixin:
     }
     """
 
-    _ATTENDEE_FIELDS = "id firstName lastName fullName avatar user { email }"
-
     _MEETING_DETAILS_QUERY = f"""
     query($id: Long!) {{
       meeting(id: $id) {{
@@ -46,11 +56,7 @@ class MeetingOperationsMixin:
         meetingType
         createdTimestamp
         archived
-        attendees(order: [{{ fullName: ASC }}]) {{
-          nodes {{
-            {_ATTENDEE_FIELDS}
-          }}
-        }}
+        {_ATTENDEES_FIELD}
       }}
     }}
     """
@@ -58,64 +64,10 @@ class MeetingOperationsMixin:
     _MEETING_ATTENDEES_QUERY = f"""
     query($id: Long!) {{
       meeting(id: $id) {{
-        attendees(order: [{{ fullName: ASC }}]) {{
-          nodes {{
-            {_ATTENDEE_FIELDS}
-          }}
-        }}
+        {_ATTENDEES_FIELD}
       }}
     }}
     """
-
-    def _transform_attendee(self, node: dict[str, Any]) -> User:
-        """Transform a raw `attendees` connection node into a `User` model.
-
-        Returns:
-            A `User` model instance.
-
-        """
-        user_ref: dict[str, Any] = node.get("user") or {}
-        # Constructed with alias keyword names (matching the raw GraphQL
-        # field names) rather than the model's snake_case field names: the
-        # model declares `Field(alias=...)` for these, and that alias is
-        # what pydantic's generated `__init__` exposes to static type
-        # checkers even though `validate_by_name=True` also accepts the
-        # field name at runtime.
-        return User(
-            id=node["id"],
-            firstName=node.get("firstName"),
-            lastName=node.get("lastName"),
-            fullName=node.get("fullName"),
-            avatar=node.get("avatar"),
-            email=user_ref.get("email"),
-        )
-
-    def _transform_meeting_list_item(self, node: dict[str, Any]) -> MeetingListItem:
-        """Transform a raw `meetingsListLookup` node into a `MeetingListItem`.
-
-        Returns:
-            A `MeetingListItem` model instance.
-
-        """
-        return MeetingListItem(**node)
-
-    def _transform_meeting(self, data: dict[str, Any]) -> Meeting:
-        """Transform a raw `meeting(id)` response into a `Meeting` model.
-
-        Returns:
-            A `Meeting` model instance.
-
-        """
-        attendee_nodes = dig_nodes(data, "attendees")
-        return Meeting(
-            id=data["id"],
-            name=data.get("name"),
-            orgId=data.get("orgId"),
-            meetingType=data.get("meetingType"),
-            createdTimestamp=data["createdTimestamp"],
-            archived=data.get("archived", False),
-            attendees=[self._transform_attendee(node) for node in attendee_nodes],
-        )
 
 
 class MeetingOperations(GraphQLOperations, MeetingOperationsMixin):
@@ -139,10 +91,11 @@ class MeetingOperations(GraphQLOperations, MeetingOperationsMixin):
         """
         if user_id is None:
             user_id = self.user_id
-
         data = self._execute(self._MEETING_LIST_QUERY, {"userId": user_id})
-        nodes = dig_nodes(data, "user", "meetingsListLookup")
-        return [self._transform_meeting_list_item(node) for node in nodes]
+        return [
+            MeetingListItem.model_validate(node)
+            for node in dig_nodes(data, "user", "meetingsListLookup")
+        ]
 
     def details(self, meeting_id: int) -> Meeting:
         """Get details for a meeting, including its attendees.
@@ -161,8 +114,8 @@ class MeetingOperations(GraphQLOperations, MeetingOperationsMixin):
 
         """
         data = self._execute(self._MEETING_DETAILS_QUERY, {"id": meeting_id})
-        return self._transform_meeting(
-            self._require_entity(data, "meeting", meeting_id, "Meeting")
+        return Meeting.model_validate(
+            self._one(data, "meeting", label="Meeting", entity_id=meeting_id)
         )
 
     def attendees(self, meeting_id: int) -> builtins.list[User]:
@@ -176,8 +129,10 @@ class MeetingOperations(GraphQLOperations, MeetingOperationsMixin):
 
         """
         data = self._execute(self._MEETING_ATTENDEES_QUERY, {"id": meeting_id})
-        nodes = dig_nodes(data, "meeting", "attendees")
-        return [self._transform_attendee(node) for node in nodes]
+        return [
+            User.model_validate(node)
+            for node in dig_nodes(data, "meeting", "attendees")
+        ]
 
 
 class AsyncMeetingOperations(AsyncGraphQLOperations, MeetingOperationsMixin):
@@ -195,10 +150,11 @@ class AsyncMeetingOperations(AsyncGraphQLOperations, MeetingOperationsMixin):
         """
         if user_id is None:
             user_id = await self.get_user_id()
-
         data = await self._execute(self._MEETING_LIST_QUERY, {"userId": user_id})
-        nodes = dig_nodes(data, "user", "meetingsListLookup")
-        return [self._transform_meeting_list_item(node) for node in nodes]
+        return [
+            MeetingListItem.model_validate(node)
+            for node in dig_nodes(data, "user", "meetingsListLookup")
+        ]
 
     async def details(self, meeting_id: int) -> Meeting:
         """Get details for a meeting, including its attendees.
@@ -211,8 +167,8 @@ class AsyncMeetingOperations(AsyncGraphQLOperations, MeetingOperationsMixin):
 
         """
         data = await self._execute(self._MEETING_DETAILS_QUERY, {"id": meeting_id})
-        return self._transform_meeting(
-            self._require_entity(data, "meeting", meeting_id, "Meeting")
+        return Meeting.model_validate(
+            self._one(data, "meeting", label="Meeting", entity_id=meeting_id)
         )
 
     async def attendees(self, meeting_id: int) -> builtins.list[User]:
@@ -226,5 +182,7 @@ class AsyncMeetingOperations(AsyncGraphQLOperations, MeetingOperationsMixin):
 
         """
         data = await self._execute(self._MEETING_ATTENDEES_QUERY, {"id": meeting_id})
-        nodes = dig_nodes(data, "meeting", "attendees")
-        return [self._transform_attendee(node) for node in nodes]
+        return [
+            User.model_validate(node)
+            for node in dig_nodes(data, "meeting", "attendees")
+        ]

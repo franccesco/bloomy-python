@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
 from bloomy.exceptions import GraphQLError
-from bloomy.v2.models import Metric
+from bloomy.v2.models import Metric, MetricFrequency, MetricRule, MetricUnit
 from bloomy.v2.operations.metric import AsyncMetricOperations, MetricOperations
 
 GRAPHQL_URL = "https://app.bloomgrowth.com/graphql/"
@@ -22,7 +23,6 @@ METRIC_NODE = {
     "minGoalValue": "100.00000",
     "maxGoalValue": None,
     "archived": False,
-    "metricType": "METRIC",
     "notesId": None,
     "notesText": "",
     "localHtml": None,
@@ -32,32 +32,24 @@ METRIC_NODE = {
     "assignee": {"id": 1305290, "fullName": "Fran Orozco"},
 }
 
-DIVIDER_NODE = {
-    "measurableId": 0,
-    "title": None,
-    "units": "NONE",
-    "rule": "GREATER_THAN",
-    "frequency": "WEEKLY",
-    "singleGoalValue": None,
-    "minGoalValue": None,
-    "maxGoalValue": None,
-    "archived": False,
-    "metricType": "DIVIDER",
-    "notesId": "0",
-    "notesText": "",
-    "localHtml": None,
-    "collaborationEnabled": False,
-    "dateCreated": 1790278038,
-    "isExternallySynced": False,
-    "assignee": None,
-}
-
 SCORE_NODE = {
     "id": 499964609,
     "value": "123.00000",
     "timestamp": 1789862400,
     "notesText": "probe note",
     "measurableId": 2036155,
+}
+
+DUPLICATE_SCORE_ERROR = {
+    "errors": [
+        {
+            "message": "Unexpected Execution Error",
+            "extensions": {
+                "message": "A score for this measurable and date already exists."
+            },
+        }
+    ],
+    "data": {"CreateMetricScore": None},
 }
 
 EMPTY_SCORE_NODE = {
@@ -111,12 +103,12 @@ class TestMetricOperationsSync:
         with pytest.raises(GraphQLError, match="Metric 999999999 not found"):
             ops.details(999999999)
 
-    def test_list_meeting_filters_divider_and_sets_where(self) -> None:
-        """`list(meeting_id=...)` filters DIVIDER rows and archived metrics."""
+    def test_list_meeting_filters_dividers_server_side(self) -> None:
+        """`list(meeting_id=...)` excludes dividers and archived metrics via `where`."""
         client = Mock()
         ops = MetricOperations(client, GRAPHQL_URL)
         client.post.return_value = _response(
-            {"data": {"meeting": {"metrics": {"nodes": [METRIC_NODE, DIVIDER_NODE]}}}}
+            {"data": {"meeting": {"metrics": {"nodes": [METRIC_NODE]}}}}
         )
 
         result = ops.list(meeting_id=349524)
@@ -150,7 +142,9 @@ class TestMetricOperationsSync:
         client = Mock()
         ops = MetricOperations(client, GRAPHQL_URL)
 
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(
+            ValueError, match="Cannot specify both meeting_id and user_id"
+        ):
             ops.list(meeting_id=349524, user_id=1305290)
 
     def test_list_defaults_to_current_user(self) -> None:
@@ -511,7 +505,7 @@ class TestMetricOperationsSync:
             _response({"data": {"metric": {"scoresNonPaginated": []}}}),
         ]
 
-        with pytest.raises(GraphQLError, match="not found"):
+        with pytest.raises(GraphQLError, match="Metric score 999 not found"):
             ops.update_score(2036155, 999, value=1)
 
     def test_clear_score(self) -> None:
@@ -715,6 +709,185 @@ class TestMetricOperationsSync:
 
         assert client.post.call_count == 2
 
+    def test_list_user_with_frequency(self) -> None:
+        """`list(user_id=..., frequency=...)` queries `user.metrics` directly."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response(
+            {"data": {"user": {"metrics": {"nodes": [METRIC_NODE]}}}}
+        )
+
+        result = ops.list(user_id=42, frequency=MetricFrequency.MONTHLY)
+
+        assert [metric.id for metric in result] == [2036155]
+        assert client.post.call_count == 1
+        payload = client.post.call_args.kwargs["json"]
+        assert "user(id: $userId)" in payload["query"]
+        assert payload["variables"] == {
+            "userId": 42,
+            "where": {
+                "and": [
+                    {"archived": {"eq": False}},
+                    {"metricType": {"eq": "METRIC"}},
+                    {"frequency": {"eq": "MONTHLY"}},
+                ]
+            },
+        }
+
+    def test_create_sends_enum_values_as_strings(self) -> None:
+        """`create()` sends `units`/`rule`/`frequency` enums by value."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.side_effect = [
+            _response({"data": {"CreateMetric": {"id": 2036155}}}),
+            _response({"data": {"metric": METRIC_NODE}}),
+        ]
+
+        ops.create(
+            349524,
+            "SDK v2 test metric",
+            user_id=1305290,
+            goal="7.5",
+            units=MetricUnit.DOLLAR,
+            rule=MetricRule.LESS_THAN,
+            frequency=MetricFrequency.DAILY,
+        )
+
+        create_input = client.post.call_args_list[0].kwargs["json"]["variables"][
+            "input"
+        ]
+        assert create_input["units"] == "DOLLAR"
+        assert create_input["rule"] == "LESS_THAN"
+        assert create_input["frequency"] == "DAILY"
+        assert create_input["singleGoalValue"] == "7.5"
+
+    def test_update_between_range_goal(self) -> None:
+        """`update(rule=BETWEEN, min_goal=..., max_goal=...)` sends the range goal."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.side_effect = [
+            _response({"data": {"EditMetric": {"id": 2036155}}}),
+            _response({"data": {"metric": METRIC_NODE}}),
+        ]
+
+        ops.update(2036155, rule=MetricRule.BETWEEN, min_goal=1, max_goal=2.5)
+
+        edit_vars = client.post.call_args_list[0].kwargs["json"]["variables"]
+        assert edit_vars["input"] == {
+            "metricId": 2036155,
+            "rule": "BETWEEN",
+            "minGoalValue": "1",
+            "maxGoalValue": "2.5",
+        }
+
+    def test_update_raises_when_edit_metric_is_null(self) -> None:
+        """A `null` `EditMetric` result raises instead of re-reading the metric."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"EditMetric": None}})
+
+        with pytest.raises(GraphQLError, match="update metric failed"):
+            ops.update(2036155, title="New title")
+
+        assert client.post.call_count == 1
+
+    def test_archive_raises_when_edit_metric_id_is_zero(self) -> None:
+        """An `EditMetric` result with id `0` raises instead of re-reading."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"EditMetric": {"id": 0}}})
+
+        with pytest.raises(GraphQLError, match="archive metric failed"):
+            ops.archive(2036155)
+
+        assert client.post.call_count == 1
+
+    def test_update_score_notes_only_rereads_by_id(self) -> None:
+        """`update_score(notes=...)` sends only `notesText` and re-reads by id."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.side_effect = [
+            _response({"data": {"EditMetricScore": {"id": 499964609}}}),
+            _response({"data": {"metric": {"scoresNonPaginated": [SCORE_NODE]}}}),
+        ]
+
+        result = ops.update_score(2036155, 499964609, notes="probe note")
+
+        assert result.notes == "probe note"
+        edit_vars = client.post.call_args_list[0].kwargs["json"]["variables"]
+        assert edit_vars["input"] == {"id": 499964609, "notesText": "probe note"}
+        read_vars = client.post.call_args_list[1].kwargs["json"]["variables"]
+        assert read_vars == {"metricId": 2036155, "where": {"id": {"eq": 499964609}}}
+
+    def test_clear_score_raises_when_edit_is_null(self) -> None:
+        """A `null` `EditMetricScore` result raises instead of re-reading."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"EditMetricScore": None}})
+
+        with pytest.raises(GraphQLError, match="clear score failed"):
+            ops.clear_score(2036155, 499964609)
+
+        assert client.post.call_count == 1
+
+    def test_scores_date_bounds_are_utc_midnight(self) -> None:
+        """`scores(start=date, end=date)` sends 00:00 UTC unix seconds."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response(
+            {"data": {"metric": {"scoresNonPaginated": []}}}
+        )
+
+        ops.scores(2036155, start=date(2026, 9, 21), end=date(2026, 9, 22))
+
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables["where"] == {
+            "and": [
+                {"timestamp": {"gte": 1789948800.0}},
+                {"timestamp": {"lte": 1790035200.0}},
+            ]
+        }
+
+    def test_set_score_daily_duplicate_picks_same_utc_day(self) -> None:
+        """The DAILY fallback searches +/- 2 days and edits the same-UTC-day score."""
+        client = Mock()
+        ops = MetricOperations(client, GRAPHQL_URL)
+        ts = 1790208001  # 2026-09-24 00:00:01 UTC
+        day_before = {**SCORE_NODE, "id": 7, "value": "", "timestamp": ts - 86400}
+        same_day = {**SCORE_NODE, "id": 8, "value": "", "timestamp": ts + 3600}
+        client.post.side_effect = [
+            _response(DUPLICATE_SCORE_ERROR),
+            _response(
+                {"data": {"metric": {"scoresNonPaginated": [day_before, same_day]}}}
+            ),
+            _response({"data": {"EditMetricScore": {"id": 8}}}),
+            _response(
+                {
+                    "data": {
+                        "metric": {
+                            "scoresNonPaginated": [{**same_day, "value": "3.00000"}]
+                        }
+                    }
+                }
+            ),
+        ]
+
+        result = ops.set_score(2036158, 3, ts)
+
+        assert result.id == 8
+        lookup_vars = client.post.call_args_list[1].kwargs["json"]["variables"]
+        assert lookup_vars == {
+            "metricId": 2036158,
+            "where": {
+                "and": [
+                    {"timestamp": {"gte": ts - 172800.0}},
+                    {"timestamp": {"lte": ts + 172800.0}},
+                ]
+            },
+        }
+        edit_vars = client.post.call_args_list[2].kwargs["json"]["variables"]
+        assert edit_vars["input"] == {"id": 8, "value": "3"}
+
 
 class TestMetricOperationsAsync:
     """Tests for the async `AsyncMetricOperations`."""
@@ -747,7 +920,9 @@ class TestMetricOperationsAsync:
         client = AsyncMock()
         ops = AsyncMetricOperations(client, GRAPHQL_URL)
 
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(
+            ValueError, match="Cannot specify both meeting_id and user_id"
+        ):
             await ops.list(meeting_id=349524, user_id=1305290)
 
     @pytest.mark.asyncio
@@ -944,12 +1119,12 @@ class TestMetricOperationsAsync:
         assert result.value is None
 
     @pytest.mark.asyncio
-    async def test_list_meeting_filters_divider_and_sets_where(self) -> None:
-        """`list(meeting_id=...)` queries `meeting(id){ metrics }`, filters dividers."""
+    async def test_list_meeting_filters_dividers_server_side(self) -> None:
+        """`list(meeting_id=...)` excludes dividers and archived metrics via `where`."""
         client = AsyncMock()
         ops = AsyncMetricOperations(client, GRAPHQL_URL)
         client.post.return_value = _async_response(
-            {"data": {"meeting": {"metrics": {"nodes": [METRIC_NODE, DIVIDER_NODE]}}}}
+            {"data": {"meeting": {"metrics": {"nodes": [METRIC_NODE]}}}}
         )
 
         result = await ops.list(meeting_id=349524)
@@ -1294,7 +1469,7 @@ class TestMetricOperationsAsync:
             _async_response({"data": {"metric": {"scoresNonPaginated": []}}}),
         ]
 
-        with pytest.raises(GraphQLError, match="not found"):
+        with pytest.raises(GraphQLError, match="Metric score 999 not found"):
             await ops.update_score(2036155, 999, value=1)
 
     @pytest.mark.asyncio
@@ -1332,3 +1507,94 @@ class TestMetricOperationsAsync:
         assert result.notes == "Metric notes"
         assert result.notes_id == "pad-1"
         assert result.created_date.tzinfo is not None
+
+    @pytest.mark.asyncio
+    async def test_list_user_with_frequency(self) -> None:
+        """`list(user_id=..., frequency=...)` queries `user.metrics` directly."""
+        client = AsyncMock()
+        ops = AsyncMetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response(
+            {"data": {"user": {"metrics": {"nodes": [METRIC_NODE]}}}}
+        )
+
+        result = await ops.list(user_id=42, frequency=MetricFrequency.MONTHLY)
+
+        assert [metric.id for metric in result] == [2036155]
+        assert client.post.call_count == 1
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables["userId"] == 42
+        assert {"frequency": {"eq": "MONTHLY"}} in variables["where"]["and"]
+
+    @pytest.mark.asyncio
+    async def test_update_raises_when_edit_metric_is_null(self) -> None:
+        """A `null` `EditMetric` result raises instead of re-reading the metric."""
+        client = AsyncMock()
+        ops = AsyncMetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"EditMetric": None}})
+
+        with pytest.raises(GraphQLError, match="update metric failed"):
+            await ops.update(2036155, title="New title")
+
+        assert client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_update_score_notes_only_rereads_by_id(self) -> None:
+        """`update_score(notes=...)` sends only `notesText` and re-reads by id."""
+        client = AsyncMock()
+        ops = AsyncMetricOperations(client, GRAPHQL_URL)
+        client.post.side_effect = [
+            _async_response({"data": {"EditMetricScore": {"id": 499964609}}}),
+            _async_response({"data": {"metric": {"scoresNonPaginated": [SCORE_NODE]}}}),
+        ]
+
+        result = await ops.update_score(2036155, 499964609, notes="probe note")
+
+        assert result.notes == "probe note"
+        edit_vars = client.post.call_args_list[0].kwargs["json"]["variables"]
+        assert edit_vars["input"] == {"id": 499964609, "notesText": "probe note"}
+        read_vars = client.post.call_args_list[1].kwargs["json"]["variables"]
+        assert read_vars == {"metricId": 2036155, "where": {"id": {"eq": 499964609}}}
+
+    @pytest.mark.asyncio
+    async def test_clear_score_raises_when_edit_is_null(self) -> None:
+        """A `null` `EditMetricScore` result raises instead of re-reading."""
+        client = AsyncMock()
+        ops = AsyncMetricOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"EditMetricScore": None}})
+
+        with pytest.raises(GraphQLError, match="clear score failed"):
+            await ops.clear_score(2036155, 499964609)
+
+        assert client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_set_score_daily_duplicate_picks_same_utc_day(self) -> None:
+        """The DAILY fallback edits the score on the same UTC day as `timestamp`."""
+        client = AsyncMock()
+        ops = AsyncMetricOperations(client, GRAPHQL_URL)
+        ts = 1790208001  # 2026-09-24 00:00:01 UTC
+        day_before = {**SCORE_NODE, "id": 7, "value": "", "timestamp": ts - 86400}
+        same_day = {**SCORE_NODE, "id": 8, "value": "", "timestamp": ts + 3600}
+        client.post.side_effect = [
+            _async_response(DUPLICATE_SCORE_ERROR),
+            _async_response(
+                {"data": {"metric": {"scoresNonPaginated": [day_before, same_day]}}}
+            ),
+            _async_response({"data": {"EditMetricScore": {"id": 8}}}),
+            _async_response(
+                {
+                    "data": {
+                        "metric": {
+                            "scoresNonPaginated": [{**same_day, "value": "3.00000"}]
+                        }
+                    }
+                }
+            ),
+        ]
+
+        result = await ops.set_score(2036158, 3, ts)
+
+        assert result.id == 8
+        assert result.value == 3.0
+        edit_vars = client.post.call_args_list[2].kwargs["json"]["variables"]
+        assert edit_vars["input"] == {"id": 8, "value": "3"}

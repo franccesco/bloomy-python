@@ -6,32 +6,32 @@ import builtins
 from typing import Any
 
 from ..base import (
+    MEETING_REF_FIELDS,
+    NOTES_FIELDS,
+    USER_REF_FIELDS,
     AsyncGraphQLOperations,
     GraphQLOperations,
+    compact,
     dig_nodes,
-    extract_notes,
     merge_nodes,
 )
 from ..models import Headline
 
-_HEADLINE_FIELDS = """
+_HEADLINE_FIELDS = f"""
 id
 title
 recurrenceId
-notesId
-notesText
-localHtml
-collaborationEnabled
 archived
 archivedTimestamp
 dateCreated
-assignee { id fullName }
-meeting { id name }
+{NOTES_FIELDS}
+{USER_REF_FIELDS}
+{MEETING_REF_FIELDS}
 """
 
 
 class HeadlineOperationsMixin:
-    """Shared GraphQL documents and response transforms for headline operations."""
+    """GraphQL documents, inputs, and response parsing shared by headline operations."""
 
     _HEADLINE_DETAILS_QUERY = f"""
     query($id: Long!) {{
@@ -41,12 +41,8 @@ class HeadlineOperationsMixin:
     }}
     """
 
-    # `meeting.headlines` returns only OPEN headlines (`CloseTime == null`);
-    # `meeting.archivedHeadlines` is a separate connection for archived ones,
-    # selected conditionally in this one document via `@include` so `list()`
-    # never issues more than one request. Verified live against production
-    # (`archivedHeadlines` is omitted from the response entirely when
-    # `$includeArchived` is `false`).
+    # `meeting.headlines` holds only open headlines; archived ones are in the
+    # separate `archivedHeadlines` connection.
     _HEADLINE_MEETING_LIST_QUERY = f"""
     query($meetingId: Long!, $includeArchived: Boolean!) {{
       meeting(id: $meetingId) {{
@@ -65,12 +61,9 @@ class HeadlineOperationsMixin:
     }}
     """
 
-    # Root `headlines(userId)` returns every headline owned by the user,
-    # archived ones included, with no way to filter server-side beyond
-    # `where`; filtering is done client-side in `list()` instead.
     _HEADLINE_USER_LIST_QUERY = f"""
-    query($userId: Long!) {{
-      headlines(userId: $userId, order: [{{ dateCreated: ASC }}]) {{
+    query($userId: Long!, $where: HeadlineQueryModelFilterInput) {{
+      headlines(userId: $userId, where: $where, order: [{{ dateCreated: ASC }}]) {{
         nodes {{
           {_HEADLINE_FIELDS}
         }}
@@ -86,10 +79,6 @@ class HeadlineOperationsMixin:
     }
     """
 
-    # `EditHeadline` returns `IdModel { id }`, not the
-    # `{success message errorDetails}` shape `EditIssue` returns, so it is
-    # run with a plain `_execute` rather than `_run_mutation`; a failure
-    # surfaces as a top-level GraphQL `errors` entry instead.
     _HEADLINE_EDIT_MUTATION = """
     mutation($input: HeadlineEditModelInput!) {
       EditHeadline(input: $input) {
@@ -98,14 +87,68 @@ class HeadlineOperationsMixin:
     }
     """
 
-    def _transform_headline(self, data: dict[str, Any]) -> Headline:
-        """Transform a raw GraphQL headline object into a `Headline` model.
+    @classmethod
+    def _headline_list_request(
+        cls, meeting_id: int | None, user_id: int | None, *, include_archived: bool
+    ) -> tuple[str, dict[str, Any]]:
+        """Pick the list document for a meeting or a user, with its variables.
+
+        Root `headlines(userId)` includes archived headlines, so the user
+        variant filters them out with `where` unless `include_archived`.
 
         Returns:
-            A `Headline` model instance.
+            The query document and its variables.
 
         """
-        return Headline(**data, notes=extract_notes(data))
+        if meeting_id is not None:
+            return cls._HEADLINE_MEETING_LIST_QUERY, {
+                "meetingId": meeting_id,
+                "includeArchived": include_archived,
+            }
+        where = None if include_archived else {"archived": {"eq": False}}
+        return cls._HEADLINE_USER_LIST_QUERY, {"userId": user_id, "where": where}
+
+    @staticmethod
+    def _headlines_from(data: dict[str, Any]) -> list[Headline]:
+        """Validate the headlines of a meeting or user list response.
+
+        A response carries either the meeting's connections or the root
+        `headlines` connection; the absent ones read as empty.
+
+        Returns:
+            The headlines, ordered by creation date.
+
+        """
+        nodes = merge_nodes(
+            dig_nodes(data, "meeting", "headlines"),
+            dig_nodes(data, "meeting", "archivedHeadlines"),
+            dig_nodes(data, "headlines"),
+        )
+        return [Headline.model_validate(node) for node in nodes]
+
+    @staticmethod
+    def _headline_create_input(
+        *, meeting_id: int, title: str, user_id: int
+    ) -> dict[str, Any]:
+        """Build the `HeadlineCreateModelInput` fields, apart from notes.
+
+        Returns:
+            The input fields.
+
+        """
+        return {"title": title, "assignee": user_id, "meetings": [meeting_id]}
+
+    @staticmethod
+    def _headline_edit_fields(
+        *, title: str | None, user_id: int | None
+    ) -> dict[str, Any]:
+        """Build the `HeadlineEditModelInput` fields that were given, apart from notes.
+
+        Returns:
+            The non-`None` input fields.
+
+        """
+        return compact(title=title, assignee=user_id)
 
 
 class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
@@ -128,8 +171,8 @@ class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
 
         """
         data = self._execute(self._HEADLINE_DETAILS_QUERY, {"id": headline_id})
-        return self._transform_headline(
-            self._require_entity(data, "headline", headline_id, "Headline")
+        return Headline.model_validate(
+            self._one(data, "headline", label="Headline", entity_id=headline_id)
         )
 
     def list(
@@ -161,28 +204,14 @@ class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
             # Returns: [Headline(id=1, title='Headline 1', ...), ...]
             ```
 
-        """
-        if meeting_id is not None and user_id is not None:
-            raise ValueError("Please provide either meeting_id or user_id, not both.")
-
-        if meeting_id is not None:
-            data = self._execute(
-                self._HEADLINE_MEETING_LIST_QUERY,
-                {"meetingId": meeting_id, "includeArchived": include_archived},
-            )
-            merged = merge_nodes(
-                dig_nodes(data, "meeting", "headlines"),
-                dig_nodes(data, "meeting", "archivedHeadlines"),
-            )
-            return [self._transform_headline(node) for node in merged]
-
-        if user_id is None:
+        """  # noqa: DOC502
+        self._validate_mutual_exclusion(meeting_id, user_id, "meeting_id", "user_id")
+        if meeting_id is None and user_id is None:
             user_id = self.user_id
-        data = self._execute(self._HEADLINE_USER_LIST_QUERY, {"userId": user_id})
-        nodes = dig_nodes(data, "headlines")
-        if not include_archived:
-            nodes = [node for node in nodes if not node.get("archived")]
-        return [self._transform_headline(node) for node in nodes]
+        query, variables = self._headline_list_request(
+            meeting_id, user_id, include_archived=include_archived
+        )
+        return self._headlines_from(self._execute(query, variables))
 
     def create(
         self,
@@ -213,21 +242,16 @@ class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
         """
         if user_id is None:
             user_id = self.user_id
-
-        input_: dict[str, Any] = {
-            "title": title,
-            "assignee": user_id,
-            "meetings": [meeting_id],
-        }
-        if notes is not None:
-            input_["notesId"] = self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        data = self._execute(self._HEADLINE_CREATE_MUTATION, {"input": input_})
-        headline_id = self._require_created_id(
-            data.get("CreateHeadline"), label="headline"
+        input_ = self._headline_create_input(
+            meeting_id=meeting_id, title=title, user_id=user_id
         )
-        return self.details(headline_id)
+        result = self._mutate(
+            self._HEADLINE_CREATE_MUTATION,
+            {"input": {**input_, **self._notes_input(notes)}},
+            root_field="CreateHeadline",
+            action="create headline",
+        )
+        return self.details(result["id"])
 
     def update(
         self,
@@ -258,20 +282,11 @@ class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
             ```
 
         """
-        if title is None and user_id is None and notes is None:
+        fields = self._headline_edit_fields(title=title, user_id=user_id)
+        if not fields and notes is None:
             raise ValueError("At least one field must be provided for update")
-
-        input_: dict[str, Any] = {"headlineId": headline_id}
-        if title is not None:
-            input_["title"] = title
-        if user_id is not None:
-            input_["assignee"] = user_id
-        if notes is not None:
-            input_["notesId"] = self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        self._execute(self._HEADLINE_EDIT_MUTATION, {"input": input_})
-        return self.details(headline_id)
+        fields.update(self._notes_input(notes))
+        return self._edit(headline_id, fields, action="update headline")
 
     def archive(self, headline_id: int) -> Headline:
         """Archive a headline.
@@ -283,11 +298,7 @@ class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
             The updated `Headline`.
 
         """
-        self._execute(
-            self._HEADLINE_EDIT_MUTATION,
-            {"input": {"headlineId": headline_id, "archived": True}},
-        )
-        return self.details(headline_id)
+        return self._edit(headline_id, {"archived": True}, action="archive headline")
 
     def restore(self, headline_id: int) -> Headline:
         """Restore an archived headline.
@@ -299,9 +310,22 @@ class HeadlineOperations(GraphQLOperations, HeadlineOperationsMixin):
             The updated `Headline`.
 
         """
-        self._execute(
+        return self._edit(headline_id, {"archived": False}, action="restore headline")
+
+    def _edit(
+        self, headline_id: int, fields: dict[str, Any], *, action: str
+    ) -> Headline:
+        """Run `EditHeadline` with `fields`, then re-read the headline.
+
+        Returns:
+            The updated `Headline`.
+
+        """
+        self._mutate(
             self._HEADLINE_EDIT_MUTATION,
-            {"input": {"headlineId": headline_id, "archived": False}},
+            {"input": {"headlineId": headline_id, **fields}},
+            root_field="EditHeadline",
+            action=action,
         )
         return self.details(headline_id)
 
@@ -320,8 +344,8 @@ class AsyncHeadlineOperations(AsyncGraphQLOperations, HeadlineOperationsMixin):
 
         """
         data = await self._execute(self._HEADLINE_DETAILS_QUERY, {"id": headline_id})
-        return self._transform_headline(
-            self._require_entity(data, "headline", headline_id, "Headline")
+        return Headline.model_validate(
+            self._one(data, "headline", label="Headline", entity_id=headline_id)
         )
 
     async def list(
@@ -347,28 +371,14 @@ class AsyncHeadlineOperations(AsyncGraphQLOperations, HeadlineOperationsMixin):
         Raises:
             ValueError: If both `meeting_id` and `user_id` are provided.
 
-        """
-        if meeting_id is not None and user_id is not None:
-            raise ValueError("Please provide either meeting_id or user_id, not both.")
-
-        if meeting_id is not None:
-            data = await self._execute(
-                self._HEADLINE_MEETING_LIST_QUERY,
-                {"meetingId": meeting_id, "includeArchived": include_archived},
-            )
-            merged = merge_nodes(
-                dig_nodes(data, "meeting", "headlines"),
-                dig_nodes(data, "meeting", "archivedHeadlines"),
-            )
-            return [self._transform_headline(node) for node in merged]
-
-        if user_id is None:
+        """  # noqa: DOC502
+        self._validate_mutual_exclusion(meeting_id, user_id, "meeting_id", "user_id")
+        if meeting_id is None and user_id is None:
             user_id = await self.get_user_id()
-        data = await self._execute(self._HEADLINE_USER_LIST_QUERY, {"userId": user_id})
-        nodes = dig_nodes(data, "headlines")
-        if not include_archived:
-            nodes = [node for node in nodes if not node.get("archived")]
-        return [self._transform_headline(node) for node in nodes]
+        query, variables = self._headline_list_request(
+            meeting_id, user_id, include_archived=include_archived
+        )
+        return self._headlines_from(await self._execute(query, variables))
 
     async def create(
         self,
@@ -393,21 +403,16 @@ class AsyncHeadlineOperations(AsyncGraphQLOperations, HeadlineOperationsMixin):
         """
         if user_id is None:
             user_id = await self.get_user_id()
-
-        input_: dict[str, Any] = {
-            "title": title,
-            "assignee": user_id,
-            "meetings": [meeting_id],
-        }
-        if notes is not None:
-            input_["notesId"] = await self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        data = await self._execute(self._HEADLINE_CREATE_MUTATION, {"input": input_})
-        headline_id = self._require_created_id(
-            data.get("CreateHeadline"), label="headline"
+        input_ = self._headline_create_input(
+            meeting_id=meeting_id, title=title, user_id=user_id
         )
-        return await self.details(headline_id)
+        result = await self._mutate(
+            self._HEADLINE_CREATE_MUTATION,
+            {"input": {**input_, **await self._notes_input(notes)}},
+            root_field="CreateHeadline",
+            action="create headline",
+        )
+        return await self.details(result["id"])
 
     async def update(
         self,
@@ -432,20 +437,11 @@ class AsyncHeadlineOperations(AsyncGraphQLOperations, HeadlineOperationsMixin):
             ValueError: If no update fields are provided.
 
         """
-        if title is None and user_id is None and notes is None:
+        fields = self._headline_edit_fields(title=title, user_id=user_id)
+        if not fields and notes is None:
             raise ValueError("At least one field must be provided for update")
-
-        input_: dict[str, Any] = {"headlineId": headline_id}
-        if title is not None:
-            input_["title"] = title
-        if user_id is not None:
-            input_["assignee"] = user_id
-        if notes is not None:
-            input_["notesId"] = await self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        await self._execute(self._HEADLINE_EDIT_MUTATION, {"input": input_})
-        return await self.details(headline_id)
+        fields.update(await self._notes_input(notes))
+        return await self._edit(headline_id, fields, action="update headline")
 
     async def archive(self, headline_id: int) -> Headline:
         """Archive a headline.
@@ -457,11 +453,9 @@ class AsyncHeadlineOperations(AsyncGraphQLOperations, HeadlineOperationsMixin):
             The updated `Headline`.
 
         """
-        await self._execute(
-            self._HEADLINE_EDIT_MUTATION,
-            {"input": {"headlineId": headline_id, "archived": True}},
+        return await self._edit(
+            headline_id, {"archived": True}, action="archive headline"
         )
-        return await self.details(headline_id)
 
     async def restore(self, headline_id: int) -> Headline:
         """Restore an archived headline.
@@ -473,8 +467,23 @@ class AsyncHeadlineOperations(AsyncGraphQLOperations, HeadlineOperationsMixin):
             The updated `Headline`.
 
         """
-        await self._execute(
+        return await self._edit(
+            headline_id, {"archived": False}, action="restore headline"
+        )
+
+    async def _edit(
+        self, headline_id: int, fields: dict[str, Any], *, action: str
+    ) -> Headline:
+        """Run `EditHeadline` with `fields`, then re-read the headline.
+
+        Returns:
+            The updated `Headline`.
+
+        """
+        await self._mutate(
             self._HEADLINE_EDIT_MUTATION,
-            {"input": {"headlineId": headline_id, "archived": False}},
+            {"input": {"headlineId": headline_id, **fields}},
+            root_field="EditHeadline",
+            action=action,
         )
         return await self.details(headline_id)

@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import builtins
-from typing import Any
 
-from ..base import AsyncGraphQLOperations, GraphQLOperations
+from ..base import AsyncGraphQLOperations, GraphQLOperations, dig_nodes
 from ..models import User
+
+_USER_FIELDS = "id firstName lastName fullName email avatar"
 
 
 class UserOperationsMixin:
-    """Shared GraphQL documents and response transforms for user operations."""
-
-    _USER_FIELDS = "id firstName lastName fullName email avatar"
+    """GraphQL documents shared by user operations."""
 
     _USER_DETAILS_QUERY = f"""
     query($id: Long!) {{
@@ -31,15 +30,6 @@ class UserOperationsMixin:
       }}
     }}
     """
-
-    def _transform_user(self, data: dict[str, Any]) -> User:
-        """Transform a raw GraphQL user object into a `User` model.
-
-        Returns:
-            A `User` model instance.
-
-        """
-        return User(**data)
 
 
 class UserOperations(GraphQLOperations, UserOperationsMixin):
@@ -63,9 +53,10 @@ class UserOperations(GraphQLOperations, UserOperationsMixin):
         """
         if user_id is None:
             user_id = self.user_id
-
         data = self._execute(self._USER_DETAILS_QUERY, {"id": user_id})
-        return self._transform_user(self._require_entity(data, "user", user_id, "User"))
+        return User.model_validate(
+            self._one(data, "user", label="User", entity_id=user_id)
+        )
 
     def list(self) -> builtins.list[User]:
         """List every user in the organization.
@@ -81,7 +72,7 @@ class UserOperations(GraphQLOperations, UserOperationsMixin):
 
         """
         data = self._execute(self._USER_LIST_QUERY)
-        return [self._transform_user(node) for node in data["users"]["nodes"]]
+        return [User.model_validate(node) for node in dig_nodes(data, "users")]
 
 
 class AsyncUserOperations(AsyncGraphQLOperations, UserOperationsMixin):
@@ -99,9 +90,10 @@ class AsyncUserOperations(AsyncGraphQLOperations, UserOperationsMixin):
         """
         if user_id is None:
             user_id = await self.get_user_id()
-
         data = await self._execute(self._USER_DETAILS_QUERY, {"id": user_id})
-        return self._transform_user(self._require_entity(data, "user", user_id, "User"))
+        return User.model_validate(
+            self._one(data, "user", label="User", entity_id=user_id)
+        )
 
     async def list(self) -> builtins.list[User]:
         """List every user in the organization.
@@ -111,4 +103,4 @@ class AsyncUserOperations(AsyncGraphQLOperations, UserOperationsMixin):
 
         """
         data = await self._execute(self._USER_LIST_QUERY)
-        return [self._transform_user(node) for node in data["users"]["nodes"]]
+        return [User.model_validate(node) for node in dig_nodes(data, "users")]

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
-from urllib.parse import urlsplit
 
 import httpx
 
 from .configuration import Configuration
 from .exceptions import ConfigurationError
 from .v1 import V1
-from .v2 import V2
+from .v2 import V2, default_graphql_url
 
 if TYPE_CHECKING:
     from typing import Any
@@ -83,8 +82,7 @@ class Client:
         self._base_url = base_url
 
         if graphql_url is None:
-            parsed = urlsplit(base_url)
-            graphql_url = f"{parsed.scheme}://{parsed.netloc}/graphql/"
+            graphql_url = default_graphql_url(base_url)
         self._graphql_url = graphql_url
 
         # Initialize HTTP client

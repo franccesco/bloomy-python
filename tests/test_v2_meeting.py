@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
@@ -130,9 +131,77 @@ class TestMeetingOperationsSync:
         assert result[0].id == 1305290
         assert result[0].email == "fran@example.com"
 
+    def test_list_created_date_is_utc(self) -> None:
+        """`list()` converts `createdTimestamp` to an aware UTC datetime."""
+        client = Mock()
+        ops = MeetingOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response(
+            {"data": {"user": {"meetingsListLookup": {"nodes": [MEETING_LIST_NODE]}}}}
+        )
+
+        result = ops.list(user_id=1305290)
+
+        assert result[0].created_date == datetime.fromtimestamp(1790273635, tz=UTC)
+
+    def test_details_null_attendees_is_empty(self) -> None:
+        """`details()` returns no attendees when the connection is `null`."""
+        client = Mock()
+        ops = MeetingOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response(
+            {"data": {"meeting": {**MEETING_DETAILS_DATA, "attendees": None}}}
+        )
+
+        result = ops.details(349524)
+
+        assert result.attendees == []
+
+    def test_attendee_without_user_has_no_email(self) -> None:
+        """An attendee whose nested `user` is `null` gets `email=None`."""
+        client = Mock()
+        ops = MeetingOperations(client, GRAPHQL_URL)
+        node = {**ATTENDEE_NODE, "user": None}
+        client.post.return_value = _response(
+            {"data": {"meeting": {"attendees": {"nodes": [node]}}}}
+        )
+
+        result = ops.attendees(349524)
+
+        assert result[0].email is None
+        assert result[0].full_name == "Fran Orozco"
+
+    def test_attendees_unknown_meeting_returns_empty(self) -> None:
+        """`attendees()` returns `[]` when `meeting` is `null`."""
+        client = Mock()
+        ops = MeetingOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"meeting": None}})
+
+        assert ops.attendees(999999999) == []
+
 
 class TestMeetingOperationsAsync:
     """Tests for the async `AsyncMeetingOperations`."""
+
+    @pytest.mark.asyncio
+    async def test_list_defaults_to_current_user(self) -> None:
+        """`list()` with no `user_id` fetches the authenticated user first."""
+        client = AsyncMock()
+        ops = AsyncMeetingOperations(client, GRAPHQL_URL)
+        client.post.side_effect = [
+            _response({"data": {"getAuthenticatedUserId": {"id": 1305290}}}),
+            _response(
+                {
+                    "data": {
+                        "user": {"meetingsListLookup": {"nodes": [MEETING_LIST_NODE]}}
+                    }
+                }
+            ),
+        ]
+
+        result = await ops.list()
+
+        assert [meeting.id for meeting in result] == [349524]
+        variables = client.post.call_args_list[1].kwargs["json"]["variables"]
+        assert variables == {"userId": 1305290}
 
     @pytest.mark.asyncio
     async def test_list_explicit_user_id(self) -> None:
@@ -199,3 +268,17 @@ class TestMeetingOperationsAsync:
 
         assert len(result) == 1
         assert result[0].id == 1305290
+
+    @pytest.mark.asyncio
+    async def test_attendee_without_user_has_no_email(self) -> None:
+        """An attendee whose nested `user` is `null` gets `email=None`."""
+        client = AsyncMock()
+        ops = AsyncMeetingOperations(client, GRAPHQL_URL)
+        node = {**ATTENDEE_NODE, "user": None}
+        client.post.return_value = _response(
+            {"data": {"meeting": {"attendees": {"nodes": [node]}}}}
+        )
+
+        result = await ops.attendees(349524)
+
+        assert result[0].email is None

@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import builtins
-from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from ...exceptions import GraphQLError
-from ..base import AsyncGraphQLOperations, GraphQLOperations, dig_nodes, extract_notes
-from ..models import Goal, GoalStatus, MeetingRef, Milestone
-
-# Kept in sync with `milestone.py`'s `_MILESTONE_FIELDS` (duplicated rather
-# than imported, to keep the two entity modules independent). `dateDeleted`
-# is already filtered server-side; the explicit filter matches the web app's
-# own query.
-_GOAL_MILESTONE_FIELDS = "id goalId title dueDate completed status dateCreated"
+from ..base import (
+    MILESTONES_CONNECTION,
+    NOTES_FIELDS,
+    USER_REF_FIELDS,
+    AsyncGraphQLOperations,
+    GraphQLOperations,
+    TimeInput,
+    compact,
+    default_due_date,
+    dig_nodes,
+    to_timestamp,
+)
+from ..models import Goal, GoalStatus
 
 _GOAL_FIELDS = f"""
 id
@@ -24,30 +28,28 @@ dueDate
 archived
 archivedTimestamp
 dateCreated
-notesId
-notesText
-localHtml
-collaborationEnabled
-assignee {{ id fullName }}
+{NOTES_FIELDS}
+{USER_REF_FIELDS}
 meetings {{
   nodes {{
     id
     name
   }}
 }}
-milestones(
-  where: {{ and: [{{ dateDeleted: {{ eq: null }} }}] }}
-  order: [{{ dueDate: ASC }}]
-) {{
+{MILESTONES_CONNECTION}
+"""
+
+_GOALS_CONNECTION = f"""
+goals(where: $where, order: [{{ dueDate: ASC }}]) {{
   nodes {{
-    {_GOAL_MILESTONE_FIELDS}
+    {_GOAL_FIELDS}
   }}
 }}
 """
 
 
 class GoalOperationsMixin:
-    """Shared GraphQL documents and response transforms for goal operations."""
+    """GraphQL documents, inputs, and response parsing shared by goal operations."""
 
     _GOAL_DETAILS_QUERY = f"""
     query($id: Long!) {{
@@ -57,32 +59,20 @@ class GoalOperationsMixin:
     }}
     """
 
-    _GOAL_LIST_BY_MEETING_QUERY = f"""
+    _GOAL_MEETING_LIST_QUERY = f"""
     query($meetingId: Long!, $where: GoalQueryModelFilterInput) {{
       meeting(id: $meetingId) {{
-        goals(where: $where, order: [{{ dueDate: ASC }}]) {{
-          nodes {{
-            {_GOAL_FIELDS}
-          }}
-        }}
+        {_GOALS_CONNECTION}
       }}
     }}
     """
 
-    # `goals(userId)` (the root field) unconditionally excludes archived
-    # goals server-side regardless of `where` (verified live: a `where:
-    # {archived: {eq: true}}` filter still returns 0 results for a user with
-    # hundreds of archived goals). `user(id){ goals }` respects the filter
-    # (verified live), so it is used here instead to make `include_archived`
-    # actually work.
-    _GOAL_LIST_BY_USER_QUERY = f"""
+    # Root `goals(userId)` drops archived goals whatever `where` says, so the
+    # user list reads `user(id){ goals }` instead.
+    _GOAL_USER_LIST_QUERY = f"""
     query($userId: Long!, $where: GoalQueryModelFilterInput) {{
       user(id: $userId) {{
-        goals(where: $where, order: [{{ dueDate: ASC }}]) {{
-          nodes {{
-            {_GOAL_FIELDS}
-          }}
-        }}
+        {_GOALS_CONNECTION}
       }}
     }}
     """
@@ -95,13 +85,6 @@ class GoalOperationsMixin:
     }
     """
 
-    # CreateGoal/EditGoal return only `IdModel { id }` (verified live), not
-    # the `{success message errorDetails}` shape `_run_mutation` expects. A
-    # failed mutation raises through the standard `errors` array instead
-    # (an invalid input throws server-side, including `IdModel(0)` on a
-    # failed create), so these are executed with plain `_execute`. `archive`
-    # additionally re-reads the goal, because `EditGoal{archived: true}` can
-    # report success without archiving anything (see `archive`'s docstring).
     _GOAL_EDIT_MUTATION = """
     mutation($input: GoalEditModelInput!) {
       EditGoal(input: $input) {
@@ -110,37 +93,44 @@ class GoalOperationsMixin:
     }
     """
 
-    def _goal_where(self, *, include_archived: bool) -> dict[str, Any] | None:
-        """Build the `where` filter for a goal list connection.
+    @classmethod
+    def _goal_list_request(
+        cls, meeting_id: int | None, user_id: int | None, *, include_archived: bool
+    ) -> tuple[str, dict[str, Any]]:
+        """Pick the list document for a meeting or a user, with its variables.
 
         Returns:
-            A `GoalQueryModelFilterInput`-shaped dictionary, or `None` to
-            leave the connection unfiltered (both archived and active).
+            The query document and its variables.
 
         """
-        if include_archived:
-            return None
-        return {"and": [{"archived": {"eq": False}}]}
+        where = None if include_archived else {"and": [{"archived": {"eq": False}}]}
+        if meeting_id is not None:
+            return cls._GOAL_MEETING_LIST_QUERY, {
+                "meetingId": meeting_id,
+                "where": where,
+            }
+        return cls._GOAL_USER_LIST_QUERY, {"userId": user_id, "where": where}
 
-    def _default_due_date(self) -> date:
-        """Compute the default due date: 90 days from today, 00:00 UTC.
+    @staticmethod
+    def _goals_from(data: dict[str, Any]) -> list[Goal]:
+        """Validate the goals of a meeting or user list response.
+
+        A response carries either `meeting` or `user`; the absent one reads
+        as empty.
 
         Returns:
-            A `date` 90 days from today (UTC).
+            The goals, ordered by due date.
 
         """
-        return datetime.now(tz=UTC).date() + timedelta(days=90)
+        nodes = [
+            *dig_nodes(data, "meeting", "goals"),
+            *dig_nodes(data, "user", "goals"),
+        ]
+        return [Goal.model_validate(node) for node in nodes]
 
-    def _parse_milestone_item(
-        self, item: dict[str, Any] | tuple[Any, ...]
-    ) -> tuple[Any, Any, bool]:
-        """Parse a `create()` milestone item into `(title, due_date, completed)`.
-
-        `due_date` is returned as given (not yet converted to a unix
-        timestamp): that conversion needs `_to_timestamp`, a base-class
-        helper this mixin does not itself have access to (see
-        `GraphQLOperations`/`AsyncGraphQLOperations.create`, which call it
-        on the parsed result instead).
+    @staticmethod
+    def _goal_milestone_input(item: dict[str, Any] | tuple[Any, ...]) -> dict[str, Any]:
+        """Build a `Goal_MilestoneCreateModelInput` from a `create()` milestone item.
 
         Args:
             item: Either `{"title": ..., "due_date": ..., "completed": ...}`
@@ -148,33 +138,74 @@ class GoalOperationsMixin:
                 `(title, due_date, completed)` tuple.
 
         Returns:
-            A `(title, due_date, completed)` tuple.
+            The input fields.
 
         """
         if isinstance(item, dict):
-            return item["title"], item["due_date"], item.get("completed", False)
-        title, due_date, *rest = item
-        return title, due_date, (rest[0] if rest else False)
+            title, due_date = item["title"], item["due_date"]
+            completed = item.get("completed", False)
+        else:
+            title, due_date, *rest = item
+            completed = rest[0] if rest else False
+        return {
+            "title": title,
+            "dueDate": to_timestamp(due_date),
+            "completed": completed,
+        }
 
-    def _transform_goal(self, data: dict[str, Any]) -> Goal:
-        """Transform a raw GraphQL goal object into a `Goal` model.
+    @classmethod
+    def _goal_create_input(
+        cls,
+        *,
+        meeting_id: int,
+        title: str,
+        user_id: int,
+        due_date: TimeInput | None,
+        status: GoalStatus | str,
+        milestones: list[dict[str, Any] | tuple[Any, ...]] | None,
+    ) -> dict[str, Any]:
+        """Build the `GoalCreateModelInput` fields, apart from notes.
 
         Returns:
-            A `Goal` model instance.
+            The input fields, with the due date defaulting to 90 days out.
 
         """
-        milestone_nodes = dig_nodes(data, "milestones")
-        meeting_nodes = dig_nodes(data, "meetings")
-        rest = {
-            key: value
-            for key, value in data.items()
-            if key not in ("milestones", "meetings")
+        input_: dict[str, Any] = {
+            "title": title,
+            "assignee": user_id,
+            "dueDate": to_timestamp(
+                default_due_date(90) if due_date is None else due_date
+            ),
+            "status": str(status),
+            "meetingsAndPlans": [
+                {"meetingId": meeting_id, "addToDepartmentPlan": False}
+            ],
         }
-        return Goal(
-            **rest,
-            notes=extract_notes(data),
-            milestones=[Milestone(**node) for node in milestone_nodes],
-            meetings=[MeetingRef(**node) for node in meeting_nodes],
+        if milestones:
+            input_["milestones"] = [
+                cls._goal_milestone_input(item) for item in milestones
+            ]
+        return input_
+
+    @staticmethod
+    def _goal_edit_fields(
+        *,
+        title: str | None,
+        status: GoalStatus | str | None,
+        due_date: TimeInput | None,
+        user_id: int | None,
+    ) -> dict[str, Any]:
+        """Build the `GoalEditModelInput` fields that were given, apart from notes.
+
+        Returns:
+            The non-`None` input fields.
+
+        """
+        return compact(
+            title=title,
+            status=None if status is None else str(status),
+            dueDate=None if due_date is None else to_timestamp(due_date),
+            assignee=user_id,
         )
 
 
@@ -209,27 +240,14 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
             # Returns: [Goal(id=1, title='Ship v2', ...), ...]
             ```
 
-        """
-        if meeting_id is not None and user_id is not None:
-            raise ValueError("Please provide either meeting_id or user_id, not both.")
-
-        where = self._goal_where(include_archived=include_archived)
-
-        if meeting_id is not None:
-            data = self._execute(
-                self._GOAL_LIST_BY_MEETING_QUERY,
-                {"meetingId": meeting_id, "where": where},
-            )
-            nodes = dig_nodes(data, "meeting", "goals")
-        else:
-            if user_id is None:
-                user_id = self.user_id
-            data = self._execute(
-                self._GOAL_LIST_BY_USER_QUERY, {"userId": user_id, "where": where}
-            )
-            nodes = dig_nodes(data, "user", "goals")
-
-        return [self._transform_goal(node) for node in nodes]
+        """  # noqa: DOC502
+        self._validate_mutual_exclusion(meeting_id, user_id, "meeting_id", "user_id")
+        if meeting_id is None and user_id is None:
+            user_id = self.user_id
+        query, variables = self._goal_list_request(
+            meeting_id, user_id, include_archived=include_archived
+        )
+        return self._goals_from(self._execute(query, variables))
 
     def details(self, goal_id: int) -> Goal:
         """Get details for a goal, including its milestones.
@@ -248,14 +266,16 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
 
         """
         data = self._execute(self._GOAL_DETAILS_QUERY, {"id": goal_id})
-        return self._transform_goal(self._require_entity(data, "goal", goal_id, "Goal"))
+        return Goal.model_validate(
+            self._one(data, "goal", label="Goal", entity_id=goal_id)
+        )
 
     def create(
         self,
         meeting_id: int,
         title: str,
         user_id: int | None = None,
-        due_date: datetime | date | float | int | None = None,
+        due_date: TimeInput | None = None,
         status: GoalStatus | str = GoalStatus.ON_TRACK,
         notes: str | None = None,
         milestones: builtins.list[dict[str, Any] | tuple[Any, ...]] | None = None,
@@ -287,36 +307,21 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
         """
         if user_id is None:
             user_id = self.user_id
-        if due_date is None:
-            due_date = self._default_due_date()
-
-        input_: dict[str, Any] = {
-            "title": title,
-            "assignee": user_id,
-            "dueDate": self._to_timestamp(due_date),
-            "status": str(status),
-            "meetingsAndPlans": [
-                {"meetingId": meeting_id, "addToDepartmentPlan": False}
-            ],
-        }
-        if notes is not None:
-            input_["notesId"] = self._create_note(notes)
-            input_["collaborationEnabled"] = True
-        if milestones:
-            input_["milestones"] = [
-                {
-                    "title": parsed_title,
-                    "dueDate": self._to_timestamp(parsed_due_date),
-                    "completed": parsed_completed,
-                }
-                for parsed_title, parsed_due_date, parsed_completed in (
-                    self._parse_milestone_item(item) for item in milestones
-                )
-            ]
-
-        data = self._execute(self._GOAL_CREATE_MUTATION, {"input": input_})
-        goal_id = self._require_created_id(data.get("CreateGoal"), label="goal")
-        return self.details(goal_id)
+        input_ = self._goal_create_input(
+            meeting_id=meeting_id,
+            title=title,
+            user_id=user_id,
+            due_date=due_date,
+            status=status,
+            milestones=milestones,
+        )
+        result = self._mutate(
+            self._GOAL_CREATE_MUTATION,
+            {"input": {**input_, **self._notes_input(notes)}},
+            root_field="CreateGoal",
+            action="create goal",
+        )
+        return self.details(result["id"])
 
     def update(
         self,
@@ -324,7 +329,7 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
         *,
         title: str | None = None,
         status: GoalStatus | str | None = None,
-        due_date: datetime | date | float | int | None = None,
+        due_date: TimeInput | None = None,
         user_id: int | None = None,
         notes: str | None = None,
     ) -> Goal:
@@ -352,40 +357,21 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
             ```
 
         """
-        if (
-            title is None
-            and status is None
-            and due_date is None
-            and user_id is None
-            and notes is None
-        ):
+        fields = self._goal_edit_fields(
+            title=title, status=status, due_date=due_date, user_id=user_id
+        )
+        if not fields and notes is None:
             raise ValueError("At least one field must be provided for update")
-
-        input_: dict[str, Any] = {"goalId": goal_id}
-        if title is not None:
-            input_["title"] = title
-        if status is not None:
-            input_["status"] = str(status)
-        if due_date is not None:
-            input_["dueDate"] = self._to_timestamp(due_date)
-        if user_id is not None:
-            input_["assignee"] = user_id
-        if notes is not None:
-            input_["notesId"] = self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        self._execute(self._GOAL_EDIT_MUTATION, {"input": input_})
-        return self.details(goal_id)
+        fields.update(self._notes_input(notes))
+        return self._edit(goal_id, fields, action="update goal")
 
     def archive(self, goal_id: int) -> Goal:
         """Archive a goal.
 
         Note:
             Verified live: `EditGoal{archived: true}` can report success
-            without archiving anything, because the server detaches the goal
-            from its meetings through an un-awaited call whose exceptions
-            are lost, and the archive step itself is wrapped in a bare
-            `try/catch`. This re-reads the goal afterwards and raises
+            without archiving the goal, because the server discards the
+            archive step's exceptions. This re-reads the goal and raises
             `GraphQLError` if it is still not archived.
 
         Args:
@@ -398,10 +384,7 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
             GraphQLError: If the goal is still not archived after the edit.
 
         """
-        self._execute(
-            self._GOAL_EDIT_MUTATION, {"input": {"goalId": goal_id, "archived": True}}
-        )
-        result = self.details(goal_id)
+        result = self._edit(goal_id, {"archived": True}, action="archive goal")
         if not result.archived:
             raise GraphQLError(
                 f"archive goal {goal_id} failed: goal is still not archived"
@@ -423,8 +406,20 @@ class GoalOperations(GraphQLOperations, GoalOperationsMixin):
             The updated `Goal`.
 
         """
-        self._execute(
-            self._GOAL_EDIT_MUTATION, {"input": {"goalId": goal_id, "archived": False}}
+        return self._edit(goal_id, {"archived": False}, action="restore goal")
+
+    def _edit(self, goal_id: int, fields: dict[str, Any], *, action: str) -> Goal:
+        """Run `EditGoal` with `fields`, then re-read the goal.
+
+        Returns:
+            The updated `Goal`.
+
+        """
+        self._mutate(
+            self._GOAL_EDIT_MUTATION,
+            {"input": {"goalId": goal_id, **fields}},
+            root_field="EditGoal",
+            action=action,
         )
         return self.details(goal_id)
 
@@ -454,27 +449,14 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
         Raises:
             ValueError: If both `meeting_id` and `user_id` are provided.
 
-        """
-        if meeting_id is not None and user_id is not None:
-            raise ValueError("Please provide either meeting_id or user_id, not both.")
-
-        where = self._goal_where(include_archived=include_archived)
-
-        if meeting_id is not None:
-            data = await self._execute(
-                self._GOAL_LIST_BY_MEETING_QUERY,
-                {"meetingId": meeting_id, "where": where},
-            )
-            nodes = dig_nodes(data, "meeting", "goals")
-        else:
-            if user_id is None:
-                user_id = await self.get_user_id()
-            data = await self._execute(
-                self._GOAL_LIST_BY_USER_QUERY, {"userId": user_id, "where": where}
-            )
-            nodes = dig_nodes(data, "user", "goals")
-
-        return [self._transform_goal(node) for node in nodes]
+        """  # noqa: DOC502
+        self._validate_mutual_exclusion(meeting_id, user_id, "meeting_id", "user_id")
+        if meeting_id is None and user_id is None:
+            user_id = await self.get_user_id()
+        query, variables = self._goal_list_request(
+            meeting_id, user_id, include_archived=include_archived
+        )
+        return self._goals_from(await self._execute(query, variables))
 
     async def details(self, goal_id: int) -> Goal:
         """Get details for a goal, including its milestones.
@@ -487,14 +469,16 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
 
         """
         data = await self._execute(self._GOAL_DETAILS_QUERY, {"id": goal_id})
-        return self._transform_goal(self._require_entity(data, "goal", goal_id, "Goal"))
+        return Goal.model_validate(
+            self._one(data, "goal", label="Goal", entity_id=goal_id)
+        )
 
     async def create(
         self,
         meeting_id: int,
         title: str,
         user_id: int | None = None,
-        due_date: datetime | date | float | int | None = None,
+        due_date: TimeInput | None = None,
         status: GoalStatus | str = GoalStatus.ON_TRACK,
         notes: str | None = None,
         milestones: builtins.list[dict[str, Any] | tuple[Any, ...]] | None = None,
@@ -520,36 +504,21 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
         """
         if user_id is None:
             user_id = await self.get_user_id()
-        if due_date is None:
-            due_date = self._default_due_date()
-
-        input_: dict[str, Any] = {
-            "title": title,
-            "assignee": user_id,
-            "dueDate": self._to_timestamp(due_date),
-            "status": str(status),
-            "meetingsAndPlans": [
-                {"meetingId": meeting_id, "addToDepartmentPlan": False}
-            ],
-        }
-        if notes is not None:
-            input_["notesId"] = await self._create_note(notes)
-            input_["collaborationEnabled"] = True
-        if milestones:
-            input_["milestones"] = [
-                {
-                    "title": parsed_title,
-                    "dueDate": self._to_timestamp(parsed_due_date),
-                    "completed": parsed_completed,
-                }
-                for parsed_title, parsed_due_date, parsed_completed in (
-                    self._parse_milestone_item(item) for item in milestones
-                )
-            ]
-
-        data = await self._execute(self._GOAL_CREATE_MUTATION, {"input": input_})
-        goal_id = self._require_created_id(data.get("CreateGoal"), label="goal")
-        return await self.details(goal_id)
+        input_ = self._goal_create_input(
+            meeting_id=meeting_id,
+            title=title,
+            user_id=user_id,
+            due_date=due_date,
+            status=status,
+            milestones=milestones,
+        )
+        result = await self._mutate(
+            self._GOAL_CREATE_MUTATION,
+            {"input": {**input_, **await self._notes_input(notes)}},
+            root_field="CreateGoal",
+            action="create goal",
+        )
+        return await self.details(result["id"])
 
     async def update(
         self,
@@ -557,7 +526,7 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
         *,
         title: str | None = None,
         status: GoalStatus | str | None = None,
-        due_date: datetime | date | float | int | None = None,
+        due_date: TimeInput | None = None,
         user_id: int | None = None,
         notes: str | None = None,
     ) -> Goal:
@@ -579,40 +548,21 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
             ValueError: If no update fields are provided.
 
         """
-        if (
-            title is None
-            and status is None
-            and due_date is None
-            and user_id is None
-            and notes is None
-        ):
+        fields = self._goal_edit_fields(
+            title=title, status=status, due_date=due_date, user_id=user_id
+        )
+        if not fields and notes is None:
             raise ValueError("At least one field must be provided for update")
-
-        input_: dict[str, Any] = {"goalId": goal_id}
-        if title is not None:
-            input_["title"] = title
-        if status is not None:
-            input_["status"] = str(status)
-        if due_date is not None:
-            input_["dueDate"] = self._to_timestamp(due_date)
-        if user_id is not None:
-            input_["assignee"] = user_id
-        if notes is not None:
-            input_["notesId"] = await self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        await self._execute(self._GOAL_EDIT_MUTATION, {"input": input_})
-        return await self.details(goal_id)
+        fields.update(await self._notes_input(notes))
+        return await self._edit(goal_id, fields, action="update goal")
 
     async def archive(self, goal_id: int) -> Goal:
         """Archive a goal.
 
         Note:
             Verified live: `EditGoal{archived: true}` can report success
-            without archiving anything, because the server detaches the goal
-            from its meetings through an un-awaited call whose exceptions
-            are lost, and the archive step itself is wrapped in a bare
-            `try/catch`. This re-reads the goal afterwards and raises
+            without archiving the goal, because the server discards the
+            archive step's exceptions. This re-reads the goal and raises
             `GraphQLError` if it is still not archived.
 
         Args:
@@ -625,10 +575,7 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
             GraphQLError: If the goal is still not archived after the edit.
 
         """
-        await self._execute(
-            self._GOAL_EDIT_MUTATION, {"input": {"goalId": goal_id, "archived": True}}
-        )
-        result = await self.details(goal_id)
+        result = await self._edit(goal_id, {"archived": True}, action="archive goal")
         if not result.archived:
             raise GraphQLError(
                 f"archive goal {goal_id} failed: goal is still not archived"
@@ -650,7 +597,19 @@ class AsyncGoalOperations(AsyncGraphQLOperations, GoalOperationsMixin):
             The updated `Goal`.
 
         """
-        await self._execute(
-            self._GOAL_EDIT_MUTATION, {"input": {"goalId": goal_id, "archived": False}}
+        return await self._edit(goal_id, {"archived": False}, action="restore goal")
+
+    async def _edit(self, goal_id: int, fields: dict[str, Any], *, action: str) -> Goal:
+        """Run `EditGoal` with `fields`, then re-read the goal.
+
+        Returns:
+            The updated `Goal`.
+
+        """
+        await self._mutate(
+            self._GOAL_EDIT_MUTATION,
+            {"input": {"goalId": goal_id, **fields}},
+            root_field="EditGoal",
+            action=action,
         )
         return await self.details(goal_id)

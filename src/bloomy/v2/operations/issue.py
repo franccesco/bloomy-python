@@ -6,24 +6,24 @@ import builtins
 from typing import Any
 
 from ..base import (
+    MEETING_REF_FIELDS,
     MUTATION_RESULT_FIELDS,
+    NOTES_FIELDS,
+    USER_REF_FIELDS,
     AsyncGraphQLOperations,
     GraphQLOperations,
+    compact,
     dig_nodes,
-    extract_notes,
     merge_nodes,
+    now_timestamp,
 )
 from ..models import Issue
 
-_ISSUE_FIELDS = """
+_ISSUE_FIELDS = f"""
 id
 title
 recurrenceId
 addToDepartmentPlan
-notesId
-notesText
-localHtml
-collaborationEnabled
 completed
 completedTimestamp
 archived
@@ -32,38 +32,51 @@ dateCreated
 priorityVoteRank
 numStarVotes
 issueNumber
-assignee { id fullName }
-meeting { id name }
+{NOTES_FIELDS}
+{USER_REF_FIELDS}
 """
+
+_ISSUE_LIST_CONNECTIONS = (
+    "issues",
+    "longTermIssues",
+    "recentlySolvedIssues",
+    "archivedIssues",
+)
 
 
 class IssueOperationsMixin:
-    """Shared GraphQL documents and response transforms for issue operations."""
+    """GraphQL documents, inputs, and response parsing shared by issue operations."""
 
     _ISSUE_DETAILS_QUERY = f"""
     query($id: Long!) {{
       issue(id: $id) {{
         {_ISSUE_FIELDS}
+        {MEETING_REF_FIELDS}
       }}
     }}
     """
 
-    # `meeting.issues` excludes solved and archived issues unconditionally
-    # (it filters `CloseTime == null` server-side); `recentlySolvedIssues`
-    # and `archivedIssues` are separate connections for those, selected
-    # conditionally in this one document via `@include` so `list()` never
-    # issues more than one request. Verified live against production
-    # (`recentlySolvedIssues`/`archivedIssues` are omitted from the response
-    # entirely when their `@include(if: ...)` variable is `false`).
+    # `issues` drops solved and archived issues server-side, and the API stores
+    # long-term issues as archived, so each of those lists is its own connection.
     _ISSUE_LIST_QUERY = f"""
     query(
       $meetingId: Long!
       $where: IssueQueryModelFilterInput
+      $longTerm: Boolean!
       $includeSolved: Boolean!
       $includeArchived: Boolean!
     ) {{
       meeting(id: $meetingId) {{
-        issues(where: $where, order: [{{ dateCreated: ASC }}]) {{
+        id
+        name
+        issues(where: $where, order: [{{ dateCreated: ASC }}])
+          @skip(if: $longTerm) {{
+          nodes {{
+            {_ISSUE_FIELDS}
+          }}
+        }}
+        longTermIssues(where: $where, order: [{{ dateCreated: ASC }}])
+          @include(if: $longTerm) {{
           nodes {{
             {_ISSUE_FIELDS}
           }}
@@ -84,27 +97,13 @@ class IssueOperationsMixin:
     }}
     """
 
-    # The API stores every long-term (department plan) issue with
-    # `archived: true`, so `meeting.issues` (which drops archived issues
-    # server-side) never returns them; this dedicated connection does.
-    _ISSUE_LONG_TERM_QUERY = f"""
-    query($meetingId: Long!, $where: IssueQueryModelFilterInput) {{
-      meeting(id: $meetingId) {{
-        longTermIssues(where: $where, order: [{{ dateCreated: ASC }}]) {{
-          nodes {{
-            {_ISSUE_FIELDS}
-          }}
-        }}
+    _ISSUE_CREATE_MUTATION = f"""
+    mutation($input: IssueCreateModelInput!) {{
+      CreateIssue(input: $input) {{
+        {_ISSUE_FIELDS}
+        {MEETING_REF_FIELDS}
       }}
     }}
-    """
-
-    _ISSUE_CREATE_MUTATION = """
-    mutation($input: IssueCreateModelInput!) {
-      CreateIssue(input: $input) {
-        id
-      }
-    }
     """
 
     _ISSUE_EDIT_MUTATION = f"""
@@ -115,38 +114,89 @@ class IssueOperationsMixin:
     }}
     """
 
-    def _issue_where(self, *, long_term: bool) -> dict[str, Any]:
-        """Build the base `where` filter shared by every issue list connection.
+    @staticmethod
+    def _issue_list_variables(
+        meeting_id: int,
+        *,
+        long_term: bool,
+        include_solved: bool,
+        include_archived: bool,
+    ) -> dict[str, Any]:
+        """Build the variables for `_ISSUE_LIST_QUERY`.
 
         Returns:
-            An `IssueQueryModelFilterInput`-shaped dictionary.
+            The query variables.
 
         """
         conditions: list[dict[str, Any]] = [{"addToDepartmentPlan": {"eq": long_term}}]
         if not long_term:
-            # Excludes issues sent to another meeting; only meaningful for the
-            # short-term open list (mirrors the web app's own query).
+            # Drops issues sent to another meeting, as the web app's open list does.
             conditions.append({"sentToIssueMeetingName": {"eq": None}})
-        return {"and": conditions}
+        return {
+            "meetingId": meeting_id,
+            "where": {"and": conditions},
+            "longTerm": long_term,
+            "includeSolved": include_solved and not long_term,
+            "includeArchived": include_archived and not long_term,
+        }
 
-    def _transform_issue(self, data: dict[str, Any]) -> Issue:
-        """Transform a raw GraphQL issue object into an `Issue` model.
+    @staticmethod
+    def _issues_from(data: dict[str, Any]) -> list[Issue]:
+        """Validate the issues of an `_ISSUE_LIST_QUERY` response.
 
-        The API reports every long-term issue as archived, while the web app
-        lists them on the Long-Term tab. Archiving a long-term issue clears
-        `addToDepartmentPlan`, so an issue counts as archived only when it is
-        archived and not long-term.
+        Every connection is keyed by the issue's recurrence, so each issue's
+        meeting ref is the parent meeting's.
 
         Returns:
-            An `Issue` model instance.
+            The issues of every selected connection, ordered by creation date.
 
         """
-        fields: dict[str, Any] = {
-            **data,
-            "archived": bool(data.get("archived"))
-            and not data.get("addToDepartmentPlan"),
+        meeting: dict[str, Any] = data.get("meeting") or {}
+        meeting_ref = {"id": meeting.get("id"), "name": meeting.get("name")}
+        nodes = merge_nodes(
+            *(dig_nodes(meeting, name) for name in _ISSUE_LIST_CONNECTIONS)
+        )
+        return [
+            Issue.model_validate({**node, "meeting": meeting_ref}) for node in nodes
+        ]
+
+    @staticmethod
+    def _issue_create_input(
+        *, meeting_id: int, title: str, user_id: int, long_term: bool
+    ) -> dict[str, Any]:
+        """Build the `IssueCreateModelInput` fields, apart from notes.
+
+        Returns:
+            The input fields.
+
+        """
+        return {
+            "title": title,
+            "ownerId": user_id,
+            "recurrenceId": meeting_id,
+            "addToDepartmentPlan": long_term,
         }
-        return Issue(**fields, notes=extract_notes(data))
+
+    @staticmethod
+    def _issue_edit_fields(
+        *,
+        title: str | None,
+        user_id: int | None,
+        long_term: bool | None,
+        meeting_id: int | None,
+    ) -> dict[str, Any]:
+        """Build the `IssueEditModelInput` fields that were given, apart from notes.
+
+        Returns:
+            The non-`None` input fields.
+
+        """
+        return compact(
+            title=title,
+            assigneeId=user_id,
+            addToDepartmentPlan=long_term,
+            meetingId=meeting_id,
+        )
 
 
 class IssueOperations(GraphQLOperations, IssueOperationsMixin):
@@ -169,8 +219,8 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
 
         """
         data = self._execute(self._ISSUE_DETAILS_QUERY, {"id": issue_id})
-        return self._transform_issue(
-            self._require_entity(data, "issue", issue_id, "Issue")
+        return Issue.model_validate(
+            self._one(data, "issue", label="Issue", entity_id=issue_id)
         )
 
     def list(
@@ -201,30 +251,13 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
             ```
 
         """
-        where = self._issue_where(long_term=long_term)
-
-        if long_term:
-            data = self._execute(
-                self._ISSUE_LONG_TERM_QUERY, {"meetingId": meeting_id, "where": where}
-            )
-            nodes = dig_nodes(data, "meeting", "longTermIssues")
-            return [self._transform_issue(node) for node in nodes]
-
-        data = self._execute(
-            self._ISSUE_LIST_QUERY,
-            {
-                "meetingId": meeting_id,
-                "where": where,
-                "includeSolved": include_solved,
-                "includeArchived": include_archived,
-            },
+        variables = self._issue_list_variables(
+            meeting_id,
+            long_term=long_term,
+            include_solved=include_solved,
+            include_archived=include_archived,
         )
-        merged = merge_nodes(
-            dig_nodes(data, "meeting", "issues"),
-            dig_nodes(data, "meeting", "recentlySolvedIssues"),
-            dig_nodes(data, "meeting", "archivedIssues"),
-        )
-        return [self._transform_issue(node) for node in merged]
+        return self._issues_from(self._execute(self._ISSUE_LIST_QUERY, variables))
 
     def create(
         self,
@@ -257,20 +290,16 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
         """
         if user_id is None:
             user_id = self.user_id
-
-        input_: dict[str, Any] = {
-            "title": title,
-            "ownerId": user_id,
-            "recurrenceId": meeting_id,
-            "addToDepartmentPlan": long_term,
-        }
-        if notes is not None:
-            input_["notesId"] = self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        data = self._execute(self._ISSUE_CREATE_MUTATION, {"input": input_})
-        issue_id = self._require_created_id(data.get("CreateIssue"), label="issue")
-        return self.details(issue_id)
+        input_ = self._issue_create_input(
+            meeting_id=meeting_id, title=title, user_id=user_id, long_term=long_term
+        )
+        result = self._mutate(
+            self._ISSUE_CREATE_MUTATION,
+            {"input": {**input_, **self._notes_input(notes)}},
+            root_field="CreateIssue",
+            action="create issue",
+        )
+        return Issue.model_validate(result)
 
     def update(
         self,
@@ -306,35 +335,13 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
             ```
 
         """
-        if (
-            title is None
-            and user_id is None
-            and notes is None
-            and long_term is None
-            and meeting_id is None
-        ):
-            raise ValueError("At least one field must be provided for update")
-
-        input_: dict[str, Any] = {"id": issue_id}
-        if title is not None:
-            input_["title"] = title
-        if user_id is not None:
-            input_["assigneeId"] = user_id
-        if notes is not None:
-            input_["notesId"] = self._create_note(notes)
-            input_["collaborationEnabled"] = True
-        if long_term is not None:
-            input_["addToDepartmentPlan"] = long_term
-        if meeting_id is not None:
-            input_["meetingId"] = meeting_id
-
-        self._run_mutation(
-            self._ISSUE_EDIT_MUTATION,
-            {"input": input_},
-            root_field="EditIssue",
-            action="update issue",
+        fields = self._issue_edit_fields(
+            title=title, user_id=user_id, long_term=long_term, meeting_id=meeting_id
         )
-        return self.details(issue_id)
+        if not fields and notes is None:
+            raise ValueError("At least one field must be provided for update")
+        fields.update(self._notes_input(notes))
+        return self._edit(issue_id, fields, action="update issue")
 
     def solve(self, issue_id: int) -> Issue:
         """Mark an issue as solved.
@@ -351,19 +358,11 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
             The updated `Issue`.
 
         """
-        self._run_mutation(
-            self._ISSUE_EDIT_MUTATION,
-            {
-                "input": {
-                    "id": issue_id,
-                    "completed": True,
-                    "completedTimestamp": self._now_timestamp(),
-                }
-            },
-            root_field="EditIssue",
+        return self._edit(
+            issue_id,
+            {"completed": True, "completedTimestamp": now_timestamp()},
             action="solve issue",
         )
-        return self.details(issue_id)
 
     def reopen(self, issue_id: int) -> Issue:
         """Reopen a solved issue.
@@ -375,13 +374,11 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
             The updated `Issue`.
 
         """
-        self._run_mutation(
-            self._ISSUE_EDIT_MUTATION,
-            {"input": {"id": issue_id, "completed": False, "completedTimestamp": None}},
-            root_field="EditIssue",
+        return self._edit(
+            issue_id,
+            {"completed": False, "completedTimestamp": None},
             action="reopen issue",
         )
-        return self.details(issue_id)
 
     def archive(self, issue_id: int) -> Issue:
         """Archive an issue.
@@ -393,13 +390,7 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
             The updated `Issue`.
 
         """
-        self._run_mutation(
-            self._ISSUE_EDIT_MUTATION,
-            {"input": {"id": issue_id, "archived": True}},
-            root_field="EditIssue",
-            action="archive issue",
-        )
-        return self.details(issue_id)
+        return self._edit(issue_id, {"archived": True}, action="archive issue")
 
     def restore(self, issue_id: int) -> Issue:
         """Restore an archived issue.
@@ -414,11 +405,20 @@ class IssueOperations(GraphQLOperations, IssueOperationsMixin):
             The updated `Issue`.
 
         """
-        self._run_mutation(
+        return self._edit(issue_id, {"archived": False}, action="restore issue")
+
+    def _edit(self, issue_id: int, fields: dict[str, Any], *, action: str) -> Issue:
+        """Run `EditIssue` with `fields`, then re-read the issue.
+
+        Returns:
+            The updated `Issue`.
+
+        """
+        self._mutate(
             self._ISSUE_EDIT_MUTATION,
-            {"input": {"id": issue_id, "archived": False}},
+            {"input": {"id": issue_id, **fields}},
             root_field="EditIssue",
-            action="restore issue",
+            action=action,
         )
         return self.details(issue_id)
 
@@ -437,8 +437,8 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
 
         """
         data = await self._execute(self._ISSUE_DETAILS_QUERY, {"id": issue_id})
-        return self._transform_issue(
-            self._require_entity(data, "issue", issue_id, "Issue")
+        return Issue.model_validate(
+            self._one(data, "issue", label="Issue", entity_id=issue_id)
         )
 
     async def list(
@@ -463,30 +463,13 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
             A list of `Issue` model instances, ordered by creation date.
 
         """
-        where = self._issue_where(long_term=long_term)
-
-        if long_term:
-            data = await self._execute(
-                self._ISSUE_LONG_TERM_QUERY, {"meetingId": meeting_id, "where": where}
-            )
-            nodes = dig_nodes(data, "meeting", "longTermIssues")
-            return [self._transform_issue(node) for node in nodes]
-
-        data = await self._execute(
-            self._ISSUE_LIST_QUERY,
-            {
-                "meetingId": meeting_id,
-                "where": where,
-                "includeSolved": include_solved,
-                "includeArchived": include_archived,
-            },
+        variables = self._issue_list_variables(
+            meeting_id,
+            long_term=long_term,
+            include_solved=include_solved,
+            include_archived=include_archived,
         )
-        merged = merge_nodes(
-            dig_nodes(data, "meeting", "issues"),
-            dig_nodes(data, "meeting", "recentlySolvedIssues"),
-            dig_nodes(data, "meeting", "archivedIssues"),
-        )
-        return [self._transform_issue(node) for node in merged]
+        return self._issues_from(await self._execute(self._ISSUE_LIST_QUERY, variables))
 
     async def create(
         self,
@@ -513,20 +496,16 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
         """
         if user_id is None:
             user_id = await self.get_user_id()
-
-        input_: dict[str, Any] = {
-            "title": title,
-            "ownerId": user_id,
-            "recurrenceId": meeting_id,
-            "addToDepartmentPlan": long_term,
-        }
-        if notes is not None:
-            input_["notesId"] = await self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        data = await self._execute(self._ISSUE_CREATE_MUTATION, {"input": input_})
-        issue_id = self._require_created_id(data.get("CreateIssue"), label="issue")
-        return await self.details(issue_id)
+        input_ = self._issue_create_input(
+            meeting_id=meeting_id, title=title, user_id=user_id, long_term=long_term
+        )
+        result = await self._mutate(
+            self._ISSUE_CREATE_MUTATION,
+            {"input": {**input_, **await self._notes_input(notes)}},
+            root_field="CreateIssue",
+            action="create issue",
+        )
+        return Issue.model_validate(result)
 
     async def update(
         self,
@@ -556,35 +535,13 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
             ValueError: If no update fields are provided.
 
         """
-        if (
-            title is None
-            and user_id is None
-            and notes is None
-            and long_term is None
-            and meeting_id is None
-        ):
-            raise ValueError("At least one field must be provided for update")
-
-        input_: dict[str, Any] = {"id": issue_id}
-        if title is not None:
-            input_["title"] = title
-        if user_id is not None:
-            input_["assigneeId"] = user_id
-        if notes is not None:
-            input_["notesId"] = await self._create_note(notes)
-            input_["collaborationEnabled"] = True
-        if long_term is not None:
-            input_["addToDepartmentPlan"] = long_term
-        if meeting_id is not None:
-            input_["meetingId"] = meeting_id
-
-        await self._run_mutation(
-            self._ISSUE_EDIT_MUTATION,
-            {"input": input_},
-            root_field="EditIssue",
-            action="update issue",
+        fields = self._issue_edit_fields(
+            title=title, user_id=user_id, long_term=long_term, meeting_id=meeting_id
         )
-        return await self.details(issue_id)
+        if not fields and notes is None:
+            raise ValueError("At least one field must be provided for update")
+        fields.update(await self._notes_input(notes))
+        return await self._edit(issue_id, fields, action="update issue")
 
     async def solve(self, issue_id: int) -> Issue:
         """Mark an issue as solved.
@@ -601,19 +558,11 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
             The updated `Issue`.
 
         """
-        await self._run_mutation(
-            self._ISSUE_EDIT_MUTATION,
-            {
-                "input": {
-                    "id": issue_id,
-                    "completed": True,
-                    "completedTimestamp": self._now_timestamp(),
-                }
-            },
-            root_field="EditIssue",
+        return await self._edit(
+            issue_id,
+            {"completed": True, "completedTimestamp": now_timestamp()},
             action="solve issue",
         )
-        return await self.details(issue_id)
 
     async def reopen(self, issue_id: int) -> Issue:
         """Reopen a solved issue.
@@ -625,13 +574,11 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
             The updated `Issue`.
 
         """
-        await self._run_mutation(
-            self._ISSUE_EDIT_MUTATION,
-            {"input": {"id": issue_id, "completed": False, "completedTimestamp": None}},
-            root_field="EditIssue",
+        return await self._edit(
+            issue_id,
+            {"completed": False, "completedTimestamp": None},
             action="reopen issue",
         )
-        return await self.details(issue_id)
 
     async def archive(self, issue_id: int) -> Issue:
         """Archive an issue.
@@ -643,13 +590,7 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
             The updated `Issue`.
 
         """
-        await self._run_mutation(
-            self._ISSUE_EDIT_MUTATION,
-            {"input": {"id": issue_id, "archived": True}},
-            root_field="EditIssue",
-            action="archive issue",
-        )
-        return await self.details(issue_id)
+        return await self._edit(issue_id, {"archived": True}, action="archive issue")
 
     async def restore(self, issue_id: int) -> Issue:
         """Restore an archived issue.
@@ -664,10 +605,21 @@ class AsyncIssueOperations(AsyncGraphQLOperations, IssueOperationsMixin):
             The updated `Issue`.
 
         """
-        await self._run_mutation(
+        return await self._edit(issue_id, {"archived": False}, action="restore issue")
+
+    async def _edit(
+        self, issue_id: int, fields: dict[str, Any], *, action: str
+    ) -> Issue:
+        """Run `EditIssue` with `fields`, then re-read the issue.
+
+        Returns:
+            The updated `Issue`.
+
+        """
+        await self._mutate(
             self._ISSUE_EDIT_MUTATION,
-            {"input": {"id": issue_id, "archived": False}},
+            {"input": {"id": issue_id, **fields}},
             root_field="EditIssue",
-            action="restore issue",
+            action=action,
         )
         return await self.details(issue_id)

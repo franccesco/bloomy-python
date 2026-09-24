@@ -2,11 +2,36 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import patch
 
 from bloomy import AsyncClient, Client
 from bloomy.v1 import V1, AsyncV1
-from bloomy.v2 import V2, AsyncV2
+from bloomy.v2 import V2, AsyncV2, default_graphql_url
+
+
+def _v2_operations(namespace: V2 | AsyncV2) -> list[Any]:
+    return [
+        namespace.user,
+        namespace.meeting,
+        namespace.issue,
+        namespace.headline,
+        namespace.todo,
+        namespace.goal,
+        namespace.milestone,
+        namespace.metric,
+    ]
+
+
+class TestDefaultGraphqlUrl:
+    """Tests for `default_graphql_url`."""
+
+    def test_keeps_scheme_and_host(self) -> None:
+        """The path of the REST base URL is replaced with `/graphql/`."""
+        assert (
+            default_graphql_url("https://staging.example.com:8443/api/v1")
+            == "https://staging.example.com:8443/graphql/"
+        )
 
 
 class TestClientV1V2Wiring:
@@ -75,6 +100,25 @@ class TestClientV1V2Wiring:
             assert client.v1.user._client is client._client
             assert client.v2.user._client is client._client
 
+    def test_v2_operations_share_one_user_id_cache(self) -> None:
+        """Every `client.v2.*` object resolves the current user through one cache."""
+        with patch("bloomy.client.httpx.Client"):
+            client = Client(api_key="test-key")
+
+            caches = {id(ops._user_id_cache) for ops in _v2_operations(client.v2)}
+            assert len(caches) == 1
+
+            client.v2.user._user_id_cache.user_id = 42
+            assert client.v2.metric.user_id == 42
+
+    def test_separate_clients_do_not_share_the_cache(self) -> None:
+        """Each client has its own current-user cache."""
+        with patch("bloomy.client.httpx.Client"):
+            first = Client(api_key="test-key")
+            second = Client(api_key="other-key")
+
+            assert first.v2.issue._user_id_cache is not second.v2.issue._user_id_cache
+
 
 class TestAsyncClientV1V2Wiring:
     """Tests for `AsyncClient.v1`/`AsyncClient.v2` and the top-level aliases."""
@@ -123,3 +167,14 @@ class TestAsyncClientV1V2Wiring:
 
             assert client.v1.user._client is client._client
             assert client.v2.user._client is client._client
+
+    def test_v2_operations_share_one_user_id_cache(self) -> None:
+        """Every async `client.v2.*` object shares one current-user cache."""
+        with patch("bloomy.async_client.httpx.AsyncClient"):
+            client = AsyncClient(api_key="test-key")
+
+            caches = {id(ops._user_id_cache) for ops in _v2_operations(client.v2)}
+            assert len(caches) == 1
+
+            client.v2.user.user_id = 42
+            assert client.v2.todo.user_id == 42

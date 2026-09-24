@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import builtins
-from datetime import UTC, date, datetime
 from typing import Any
 
 from ...exceptions import GraphQLError
-from ..base import AsyncGraphQLOperations, GraphQLOperations, dig_nodes, extract_notes
+from ..base import (
+    NOTES_FIELDS,
+    USER_REF_FIELDS,
+    AsyncGraphQLOperations,
+    GraphQLOperations,
+    TimeInput,
+    compact,
+    dig_nodes,
+    to_timestamp,
+    to_utc_datetime,
+)
 from ..models import Metric, MetricFrequency, MetricRule, MetricScore, MetricUnit
 
-# Deliberately does NOT select `id`: on `meeting(id){ metrics }` that field is
-# the meeting-link id (`L10Recurrence_Measurable`), not the metric id, so
-# selecting it risks the raw dict's `id` key shadowing `measurableId` when
-# spread into `Metric(**data)` (both map to the model's aliased `id` field
-# under `validate_by_name=True`). `measurableId` alone is always the real
-# metric id, on every query path (`metric(id)`, `meeting.metrics`,
-# `user.metrics`).
-_METRIC_FIELDS = """
+# `id` is not selected: on `meeting.metrics` it is the meeting-link id, while
+# `measurableId` is the metric id on every query path.
+_METRIC_FIELDS = f"""
 measurableId
 title
 units
@@ -27,21 +31,31 @@ singleGoalValue
 minGoalValue
 maxGoalValue
 archived
-metricType
-notesId
-notesText
-localHtml
-collaborationEnabled
 dateCreated
 isExternallySynced
-assignee { id fullName }
+{NOTES_FIELDS}
+{USER_REF_FIELDS}
 """
 
 _METRIC_SCORE_FIELDS = "id value timestamp notesText measurableId"
 
+# A DAILY score is stored at the start of its day, not at the requested time, so
+# `set_score()` searches this many seconds either side and matches the UTC day.
+_DAILY_SCORE_SEARCH_WINDOW = 2 * 24 * 60 * 60
+
+
+def _text(value: object) -> str | None:
+    """Stringify an enum or decimal input value, as the API expects.
+
+    Returns:
+        `str(value)`, or `None` if `value` is `None`.
+
+    """
+    return None if value is None else str(value)
+
 
 class MetricOperationsMixin:
-    """Shared GraphQL documents and response transforms for metric operations."""
+    """GraphQL documents, inputs, and response parsing shared by metric operations."""
 
     _METRIC_DETAILS_QUERY = f"""
     query($id: Long!) {{
@@ -51,10 +65,6 @@ class MetricOperationsMixin:
     }}
     """
 
-    # `meeting.metrics` also returns metric-divider rows (`metricType:
-    # DIVIDER`, `measurableId: 0`) mixed in with real metrics; the `where`
-    # filter excludes them server-side (and archived rows, which this
-    # connection does not exclude on its own, unlike `user.metrics`).
     _METRIC_MEETING_LIST_QUERY = f"""
     query($meetingId: Long!, $where: MetricQueryModelFilterInput) {{
       meeting(id: $meetingId) {{
@@ -67,9 +77,6 @@ class MetricOperationsMixin:
     }}
     """
 
-    # `user(id){ metrics }` already excludes archived/deleted metrics
-    # server-side; the `archived` filter is kept for parity with the
-    # meeting-scoped query above.
     _METRIC_USER_LIST_QUERY = f"""
     query($userId: Long!, $where: MetricQueryModelFilterInput) {{
       user(id: $userId) {{
@@ -82,11 +89,6 @@ class MetricOperationsMixin:
     }}
     """
 
-    # CreateMetric/EditMetric return only `IdModel { id }` (verified live
-    # against production), not the `{success message errorDetails}` shape
-    # `_run_mutation` expects. A failed create/edit raises through the
-    # standard `errors` array instead, so these are executed with plain
-    # `_execute`.
     _METRIC_CREATE_MUTATION = """
     mutation($input: MetricCreateModelInput!) {
       CreateMetric(input: $input) {
@@ -103,9 +105,6 @@ class MetricOperationsMixin:
     }
     """
 
-    # `scoresNonPaginated` is a plain list, not a `{ nodes }` connection
-    # (unlike every other list field in the v2 API), so it is read directly
-    # rather than through `dig_nodes`.
     _METRIC_SCORES_QUERY = f"""
     query($metricId: Long!, $where: MetricScoreQueryModelFilterInput) {{
       metric(id: $metricId) {{
@@ -116,10 +115,6 @@ class MetricOperationsMixin:
     }}
     """
 
-    # CreateMetricScore/EditMetricScore also return `IdModel { id }`.
-    # CreateMetricScore additionally returns `{"CreateMetricScore": null}`
-    # with no `errors` entry when `value` cannot be parsed as a decimal
-    # (verified live) -- `set_score()` checks for that explicitly.
     _METRIC_SCORE_CREATE_MUTATION = """
     mutation($input: MetricScoreCreateModelInput!) {
       CreateMetricScore(input: $input) {
@@ -136,12 +131,21 @@ class MetricOperationsMixin:
     }
     """
 
-    @staticmethod
-    def _metric_where(*, frequency: MetricFrequency | str | None) -> dict[str, Any]:
-        """Build the `where` filter shared by both metric list connections.
+    @classmethod
+    def _metric_list_request(
+        cls,
+        meeting_id: int | None,
+        user_id: int | None,
+        *,
+        frequency: MetricFrequency | str | None,
+    ) -> tuple[str, dict[str, Any]]:
+        """Pick the list document for a meeting or a user, with its variables.
+
+        `meeting.metrics` also returns archived metrics and scorecard dividers
+        (`metricType: DIVIDER`), so both documents filter them out with `where`.
 
         Returns:
-            A `MetricQueryModelFilterInput`-shaped dictionary.
+            The query document and its variables.
 
         """
         conditions: list[dict[str, Any]] = [
@@ -150,25 +154,30 @@ class MetricOperationsMixin:
         ]
         if frequency is not None:
             conditions.append({"frequency": {"eq": str(frequency)}})
-        return {"and": conditions}
+        where = {"and": conditions}
+        if meeting_id is not None:
+            return cls._METRIC_MEETING_LIST_QUERY, {
+                "meetingId": meeting_id,
+                "where": where,
+            }
+        return cls._METRIC_USER_LIST_QUERY, {"userId": user_id, "where": where}
 
     @staticmethod
-    def _metric_score_where(
-        start_ts: float | None, end_ts: float | None
-    ) -> dict[str, Any] | None:
-        """Build the `where` filter for a score timestamp range.
+    def _metrics_from(data: dict[str, Any]) -> list[Metric]:
+        """Validate the metrics of a meeting or user list response.
+
+        A response carries either `meeting` or `user`; the absent one reads as
+        empty.
 
         Returns:
-            A `MetricScoreQueryModelFilterInput`-shaped dictionary, or `None`
-            if neither bound is given (no filtering).
+            The metrics.
 
         """
-        conditions: list[dict[str, Any]] = []
-        if start_ts is not None:
-            conditions.append({"timestamp": {"gte": start_ts}})
-        if end_ts is not None:
-            conditions.append({"timestamp": {"lte": end_ts}})
-        return {"and": conditions} if conditions else None
+        return [
+            Metric.model_validate(node)
+            for owner in ("meeting", "user")
+            for node in dig_nodes(data, owner, "metrics")
+        ]
 
     @staticmethod
     def _metric_goal_conflict(
@@ -177,18 +186,14 @@ class MetricOperationsMixin:
         min_goal: float | str | None,
         max_goal: float | str | None,
     ) -> str | None:
-        """Check that goal fields match the BETWEEN/non-BETWEEN rule split.
+        """Check that the goal fields match the rule.
 
-        `singleGoalValue` (`goal`) and `minGoalValue`/`maxGoalValue`
-        (`min_goal`/`max_goal`) are mutually exclusive server-side: `goal` is
-        for every rule except `BETWEEN`, and `min_goal`/`max_goal` are for
-        `BETWEEN` only. Each caller raises `ValueError` itself (so pydoclint
-        can see the `raise` and check the docstring), using this to build the
-        message.
+        `goal` (`singleGoalValue`) is for every rule except `BETWEEN`, and
+        `min_goal`/`max_goal` are for `BETWEEN` only. Callers raise the
+        `ValueError` themselves so pydoclint can check their docstrings.
 
         Returns:
-            A message describing the conflict, or `None` if the fields are
-            consistent.
+            A message describing the conflict, or `None` if there is none.
 
         """
         has_range_goal = min_goal is not None or max_goal is not None
@@ -207,7 +212,7 @@ class MetricOperationsMixin:
         return None
 
     @staticmethod
-    def _metric_update_fields(
+    def _metric_fields(
         *,
         title: str | None,
         user_id: int | None,
@@ -217,92 +222,167 @@ class MetricOperationsMixin:
         min_goal: float | str | None,
         max_goal: float | str | None,
     ) -> dict[str, Any]:
-        """Build the non-`None` `EditMetric` fields shared by `update()`.
+        """Build the metric fields that were given, apart from notes.
+
+        `MetricEditModelInput` and `MetricCreateModelInput` name these fields
+        the same way, so `create()` reuses them.
 
         Returns:
-            A dict of `MetricEditModelInput` fields (excluding `metricId` and
-            the notes fields, which `update()` sets separately).
+            The non-`None` input fields.
 
         """
-        fields: dict[str, Any] = {}
-        if title is not None:
-            fields["title"] = title
-        if user_id is not None:
-            fields["assignee"] = user_id
-        for key, value in (
-            ("units", units),
-            ("rule", rule),
-            ("singleGoalValue", goal),
-            ("minGoalValue", min_goal),
-            ("maxGoalValue", max_goal),
-        ):
-            if value is not None:
-                fields[key] = str(value)
-        return fields
+        return compact(
+            title=title,
+            assignee=user_id,
+            units=_text(units),
+            rule=_text(rule),
+            singleGoalValue=_text(goal),
+            minGoalValue=_text(min_goal),
+            maxGoalValue=_text(max_goal),
+        )
+
+    @classmethod
+    def _metric_create_input(
+        cls,
+        *,
+        meeting_id: int,
+        title: str,
+        user_id: int,
+        units: MetricUnit | str,
+        rule: MetricRule | str,
+        frequency: MetricFrequency | str,
+        goal: float | str | None,
+        min_goal: float | str | None,
+        max_goal: float | str | None,
+    ) -> dict[str, Any]:
+        """Build the `MetricCreateModelInput` fields, apart from notes.
+
+        Returns:
+            The input fields.
+
+        """
+        fields = cls._metric_fields(
+            title=title,
+            user_id=user_id,
+            units=units,
+            rule=rule,
+            goal=goal,
+            min_goal=min_goal,
+            max_goal=max_goal,
+        )
+        return {
+            **fields,
+            "frequency": str(frequency),
+            "averageOverrideType": "NONE",
+            "meetings": [meeting_id],
+            "customGoals": [],
+        }
+
+    @staticmethod
+    def _score_create_input(
+        metric_id: int, value: float | str, timestamp: float
+    ) -> dict[str, Any]:
+        """Build the `MetricScoreCreateModelInput` fields.
+
+        Returns:
+            The input fields.
+
+        """
+        return {"metricId": metric_id, "value": str(value), "timestamp": timestamp}
+
+    @staticmethod
+    def _scores_variables(
+        metric_id: int,
+        start: TimeInput | None,
+        end: TimeInput | None,
+    ) -> dict[str, Any]:
+        """Build the `_METRIC_SCORES_QUERY` variables for a timestamp range.
+
+        Returns:
+            The query variables, with a `null` `where` when neither bound is
+            given.
+
+        """
+        conditions: list[dict[str, Any]] = []
+        if start is not None:
+            conditions.append({"timestamp": {"gte": to_timestamp(start)}})
+        if end is not None:
+            conditions.append({"timestamp": {"lte": to_timestamp(end)}})
+        return {
+            "metricId": metric_id,
+            "where": {"and": conditions} if conditions else None,
+        }
+
+    @staticmethod
+    def _scores_from(data: dict[str, Any], *, include_empty: bool) -> list[MetricScore]:
+        """Validate the scores of a `_METRIC_SCORES_QUERY` response.
+
+        `scoresNonPaginated` is a plain list, not a `{ nodes }` connection.
+
+        Returns:
+            The scores, without empty placeholders unless `include_empty`.
+
+        """
+        metric: dict[str, Any] = data.get("metric") or {}
+        nodes: list[dict[str, Any]] = metric.get("scoresNonPaginated") or []
+        scores = [MetricScore.model_validate(node) for node in nodes]
+        if include_empty:
+            return scores
+        return [score for score in scores if score.value is not None]
+
+    @classmethod
+    def _score_on_day(
+        cls, data: dict[str, Any], timestamp: float
+    ) -> MetricScore | None:
+        """Find the score of a `_METRIC_SCORES_QUERY` response on `timestamp`'s UTC day.
+
+        Returns:
+            The first matching score (empty placeholders included), or `None`.
+
+        """
+        day = to_utc_datetime(timestamp).date()
+        for score in cls._scores_from(data, include_empty=True):
+            if score.week_date is not None and score.week_date.date() == day:
+                return score
+        return None
+
+    @staticmethod
+    def _created_score_id(data: dict[str, Any], value: float | str) -> int:
+        """Read the new score's id from a `CreateMetricScore` response.
+
+        Returns:
+            The score id.
+
+        Raises:
+            GraphQLError: If the result is `null`, meaning `value` could not be
+                parsed as a decimal number.
+
+        """
+        created: dict[str, Any] | None = data.get("CreateMetricScore")
+        if created is None:
+            raise GraphQLError(
+                f"CreateMetricScore: value {value!r} could not be parsed as a number"
+            )
+        return int(created["id"])
 
     @staticmethod
     def _is_duplicate_score_error(exc: GraphQLError) -> bool:
-        """Check whether a `GraphQLError` is the DAILY "already exists" error.
+        """Check whether `CreateMetricScore` failed because a DAILY score exists.
 
-        `CreateMetricScore` upserts weekly/monthly/quarterly scores by
-        period, but a DAILY score throws this error instead when one already
-        exists for the same day (verified live); `set_score()` falls back to
-        `EditMetricScore` in that case.
+        `CreateMetricScore` upserts weekly/monthly/quarterly scores by period,
+        but for a DAILY metric it raises this error when the day already has a
+        score (verified live).
 
         Returns:
-            `True` if any raw error's `extensions.message` reports an
-            existing score for the same metric and date.
+            `True` if any raw error's `extensions.message` says the score
+            already exists.
 
         """
         for error in exc.errors:
             extensions: dict[str, Any] = error.get("extensions") or {}
-            message = str(extensions.get("message") or "")
-            if "already exists" in message.lower():
+            if "already exists" in str(extensions.get("message") or "").lower():
                 return True
         return False
-
-    @staticmethod
-    def _scores_from(data: dict[str, Any]) -> builtins.list[dict[str, Any]]:
-        """Read the `scoresNonPaginated` list out of a metric query's `data`.
-
-        Returns:
-            The raw score nodes, or an empty list if the metric was missing.
-
-        """
-        metric: dict[str, Any] = data.get("metric") or {}
-        return list(metric.get("scoresNonPaginated") or [])
-
-    @staticmethod
-    def _same_day(timestamp: float, target: date) -> bool:
-        """Check whether a unix-seconds timestamp falls on `target` (UTC).
-
-        Returns:
-            `True` if `timestamp`'s UTC calendar date equals `target`.
-
-        """
-        return datetime.fromtimestamp(timestamp, tz=UTC).date() == target
-
-    def _transform_metric(self, data: dict[str, Any]) -> Metric:
-        """Transform a raw GraphQL metric object into a `Metric` model.
-
-        Returns:
-            A `Metric` model instance.
-
-        """
-        return Metric(**data, notes=extract_notes(data))
-
-    def _transform_score(self, data: dict[str, Any]) -> MetricScore:
-        """Transform a raw GraphQL metric-score object into a `MetricScore` model.
-
-        Scores carry a plain `notesText` note (no Etherpad pad, unlike
-        metrics themselves), so this reads it directly rather than through
-        `extract_notes`.
-
-        Returns:
-            A `MetricScore` model instance.
-
-        """
-        return MetricScore(**data, notes=data.get("notesText") or None)
 
 
 class MetricOperations(GraphQLOperations, MetricOperationsMixin):
@@ -332,8 +412,8 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
 
         """
         data = self._execute(self._METRIC_DETAILS_QUERY, {"id": metric_id})
-        return self._transform_metric(
-            self._require_entity(data, "metric", metric_id, "Metric")
+        return Metric.model_validate(
+            self._one(data, "metric", label="Metric", entity_id=metric_id)
         )
 
     def list(
@@ -367,31 +447,14 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
             # Returns: [Metric(id=2036155, title='New Customers', ...), ...]
             ```
 
-        """
-        if meeting_id is not None and user_id is not None:
-            raise ValueError("Please provide either meeting_id or user_id, not both.")
-
-        where = self._metric_where(frequency=frequency)
-
-        if meeting_id is not None:
-            data = self._execute(
-                self._METRIC_MEETING_LIST_QUERY,
-                {"meetingId": meeting_id, "where": where},
-            )
-            nodes = dig_nodes(data, "meeting", "metrics")
-        else:
-            if user_id is None:
-                user_id = self.user_id
-            data = self._execute(
-                self._METRIC_USER_LIST_QUERY, {"userId": user_id, "where": where}
-            )
-            nodes = dig_nodes(data, "user", "metrics")
-
-        return [
-            self._transform_metric(node)
-            for node in nodes
-            if node.get("metricType") != "DIVIDER"
-        ]
+        """  # noqa: DOC502
+        self._validate_mutual_exclusion(meeting_id, user_id, "meeting_id", "user_id")
+        if meeting_id is None and user_id is None:
+            user_id = self.user_id
+        query, variables = self._metric_list_request(
+            meeting_id, user_id, frequency=frequency
+        )
+        return self._metrics_from(self._execute(query, variables))
 
     def create(
         self,
@@ -444,30 +507,24 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
             raise ValueError(conflict)
         if user_id is None:
             user_id = self.user_id
-
-        input_: dict[str, Any] = {
-            "title": title,
-            "assignee": user_id,
-            "units": str(units),
-            "rule": str(rule),
-            "frequency": str(frequency),
-            "averageOverrideType": "NONE",
-            "meetings": [meeting_id],
-            "customGoals": [],
-        }
-        if goal is not None:
-            input_["singleGoalValue"] = str(goal)
-        if min_goal is not None:
-            input_["minGoalValue"] = str(min_goal)
-        if max_goal is not None:
-            input_["maxGoalValue"] = str(max_goal)
-        if notes is not None:
-            input_["notesId"] = self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        data = self._execute(self._METRIC_CREATE_MUTATION, {"input": input_})
-        metric_id = self._require_created_id(data.get("CreateMetric"), label="metric")
-        return self.details(metric_id)
+        input_ = self._metric_create_input(
+            meeting_id=meeting_id,
+            title=title,
+            user_id=user_id,
+            units=units,
+            rule=rule,
+            frequency=frequency,
+            goal=goal,
+            min_goal=min_goal,
+            max_goal=max_goal,
+        )
+        result = self._mutate(
+            self._METRIC_CREATE_MUTATION,
+            {"input": {**input_, **self._notes_input(notes)}},
+            root_field="CreateMetric",
+            action="create metric",
+        )
+        return self.details(result["id"])
 
     def update(
         self,
@@ -514,34 +571,22 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
             ```
 
         """
-        if all(
-            field is None
-            for field in (title, user_id, goal, min_goal, max_goal, units, rule, notes)
-        ):
+        fields = self._metric_fields(
+            title=title,
+            user_id=user_id,
+            units=units,
+            rule=rule,
+            goal=goal,
+            min_goal=min_goal,
+            max_goal=max_goal,
+        )
+        if not fields and notes is None:
             raise ValueError("At least one field must be provided for update")
-
         conflict = self._metric_goal_conflict(rule, goal, min_goal, max_goal)
         if conflict:
             raise ValueError(conflict)
-
-        input_: dict[str, Any] = {
-            "metricId": metric_id,
-            **self._metric_update_fields(
-                title=title,
-                user_id=user_id,
-                units=units,
-                rule=rule,
-                goal=goal,
-                min_goal=min_goal,
-                max_goal=max_goal,
-            ),
-        }
-        if notes is not None:
-            input_["notesId"] = self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        self._execute(self._METRIC_EDIT_MUTATION, {"input": input_})
-        return self.details(metric_id)
+        fields.update(self._notes_input(notes))
+        return self._edit(metric_id, fields, action="update metric")
 
     def archive(self, metric_id: int) -> Metric:
         """Archive a metric.
@@ -557,18 +602,14 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
             The updated `Metric`.
 
         """
-        self._execute(
-            self._METRIC_EDIT_MUTATION,
-            {"input": {"metricId": metric_id, "archived": True}},
-        )
-        return self.details(metric_id)
+        return self._edit(metric_id, {"archived": True}, action="archive metric")
 
     def scores(
         self,
         metric_id: int,
         *,
-        start: datetime | date | float | int | None = None,
-        end: datetime | date | float | int | None = None,
+        start: TimeInput | None = None,
+        end: TimeInput | None = None,
         include_empty: bool = False,
     ) -> builtins.list[MetricScore]:
         """List the scores of a metric.
@@ -590,23 +631,15 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
             ```
 
         """
-        start_ts = self._to_timestamp(start) if start is not None else None
-        end_ts = self._to_timestamp(end) if end is not None else None
-        where = self._metric_score_where(start_ts, end_ts)
-
-        data = self._execute(
-            self._METRIC_SCORES_QUERY, {"metricId": metric_id, "where": where}
-        )
-        nodes = self._scores_from(data)
-        if not include_empty:
-            nodes = [node for node in nodes if node.get("value") not in (None, "")]
-        return [self._transform_score(node) for node in nodes]
+        variables = self._scores_variables(metric_id, start, end)
+        data = self._execute(self._METRIC_SCORES_QUERY, variables)
+        return self._scores_from(data, include_empty=include_empty)
 
     def set_score(
         self,
         metric_id: int,
         value: float | str,
-        timestamp: datetime | date | float | int,
+        timestamp: TimeInput,
     ) -> MetricScore:
         """Set a metric's score for a given time.
 
@@ -634,32 +667,27 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
             ```
 
         """
-        ts = self._to_timestamp(timestamp)
+        ts = to_timestamp(timestamp)
         try:
             data = self._execute(
                 self._METRIC_SCORE_CREATE_MUTATION,
-                {
-                    "input": {
-                        "metricId": metric_id,
-                        "value": str(value),
-                        "timestamp": ts,
-                    }
-                },
+                {"input": self._score_create_input(metric_id, value, ts)},
             )
         except GraphQLError as exc:
             if not self._is_duplicate_score_error(exc):
                 raise
-            existing = self._find_score_for_day(metric_id, ts)
+            variables = self._scores_variables(
+                metric_id,
+                ts - _DAILY_SCORE_SEARCH_WINDOW,
+                ts + _DAILY_SCORE_SEARCH_WINDOW,
+            )
+            existing = self._score_on_day(
+                self._execute(self._METRIC_SCORES_QUERY, variables), ts
+            )
             if existing is None:
                 raise
             return self.update_score(metric_id, existing.id, value=value)
-
-        result = data.get("CreateMetricScore")
-        if result is None:
-            raise GraphQLError(
-                f"CreateMetricScore: value {value!r} could not be parsed as a number"
-            )
-        return self._read_score(metric_id, result["id"])
+        return self._read_score(metric_id, self._created_score_id(data, value))
 
     def update_score(
         self,
@@ -691,17 +719,10 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
             ```
 
         """
-        if value is None and notes is None:
+        fields = compact(value=_text(value), notesText=notes)
+        if not fields:
             raise ValueError("At least one of `value` or `notes` must be provided")
-
-        input_: dict[str, Any] = {"id": score_id}
-        if value is not None:
-            input_["value"] = str(value)
-        if notes is not None:
-            input_["notesText"] = notes
-
-        self._execute(self._METRIC_SCORE_EDIT_MUTATION, {"input": input_})
-        return self._read_score(metric_id, score_id)
+        return self._edit_score(metric_id, score_id, fields, action="update score")
 
     def clear_score(self, metric_id: int, score_id: int) -> MetricScore:
         """Clear a metric score's value, leaving an empty placeholder.
@@ -715,50 +736,62 @@ class MetricOperations(GraphQLOperations, MetricOperationsMixin):
             The updated `MetricScore`, with `value=None`.
 
         """
-        self._execute(
-            self._METRIC_SCORE_EDIT_MUTATION, {"input": {"id": score_id, "value": None}}
+        return self._edit_score(
+            metric_id, score_id, {"value": None}, action="clear score"
+        )
+
+    def _edit(self, metric_id: int, fields: dict[str, Any], *, action: str) -> Metric:
+        """Run `EditMetric` with `fields`, then re-read the metric.
+
+        Returns:
+            The updated `Metric`.
+
+        """
+        self._mutate(
+            self._METRIC_EDIT_MUTATION,
+            {"input": {"metricId": metric_id, **fields}},
+            root_field="EditMetric",
+            action=action,
+        )
+        return self.details(metric_id)
+
+    def _edit_score(
+        self, metric_id: int, score_id: int, fields: dict[str, Any], *, action: str
+    ) -> MetricScore:
+        """Run `EditMetricScore` with `fields`, then re-read the score.
+
+        Returns:
+            The updated `MetricScore`.
+
+        """
+        self._mutate(
+            self._METRIC_SCORE_EDIT_MUTATION,
+            {"input": {"id": score_id, **fields}},
+            root_field="EditMetricScore",
+            action=action,
         )
         return self._read_score(metric_id, score_id)
 
     def _read_score(self, metric_id: int, score_id: int) -> MetricScore:
-        """Re-read a single score through its parent metric.
+        """Read a single score through its parent metric.
 
         Returns:
             The `MetricScore` model instance.
 
-        Raises:
-            GraphQLError: If the score is not found under the metric.
-
         """
         data = self._execute(
             self._METRIC_SCORES_QUERY,
-            {"metricId": metric_id, "where": {"and": [{"id": {"eq": score_id}}]}},
+            {"metricId": metric_id, "where": {"id": {"eq": score_id}}},
         )
-        for node in self._scores_from(data):
-            if node.get("id") == score_id:
-                return self._transform_score(node)
-        raise GraphQLError(f"score {score_id} not found under metric {metric_id}")
-
-    def _find_score_for_day(self, metric_id: int, ts: float) -> MetricScore | None:
-        """Find the pre-existing score whose UTC calendar day matches `ts`.
-
-        Used by `set_score()` to fall back to `EditMetricScore` for DAILY
-        metrics, where a placeholder score already exists for every day.
-
-        Returns:
-            The matching `MetricScore`, or `None` if not found.
-
-        """
-        target = datetime.fromtimestamp(ts, tz=UTC).date()
-        where = self._metric_score_where(ts - 172800, ts + 172800)
-        data = self._execute(
-            self._METRIC_SCORES_QUERY, {"metricId": metric_id, "where": where}
+        return MetricScore.model_validate(
+            self._one(
+                data,
+                "metric",
+                "scoresNonPaginated",
+                label="Metric score",
+                entity_id=score_id,
+            )
         )
-        for node in self._scores_from(data):
-            node_ts = node.get("timestamp")
-            if node_ts is not None and self._same_day(node_ts, target):
-                return self._transform_score(node)
-        return None
 
 
 class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
@@ -780,8 +813,8 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
 
         """
         data = await self._execute(self._METRIC_DETAILS_QUERY, {"id": metric_id})
-        return self._transform_metric(
-            self._require_entity(data, "metric", metric_id, "Metric")
+        return Metric.model_validate(
+            self._one(data, "metric", label="Metric", entity_id=metric_id)
         )
 
     async def list(
@@ -809,31 +842,14 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
         Raises:
             ValueError: If both `meeting_id` and `user_id` are provided.
 
-        """
-        if meeting_id is not None and user_id is not None:
-            raise ValueError("Please provide either meeting_id or user_id, not both.")
-
-        where = self._metric_where(frequency=frequency)
-
-        if meeting_id is not None:
-            data = await self._execute(
-                self._METRIC_MEETING_LIST_QUERY,
-                {"meetingId": meeting_id, "where": where},
-            )
-            nodes = dig_nodes(data, "meeting", "metrics")
-        else:
-            if user_id is None:
-                user_id = await self.get_user_id()
-            data = await self._execute(
-                self._METRIC_USER_LIST_QUERY, {"userId": user_id, "where": where}
-            )
-            nodes = dig_nodes(data, "user", "metrics")
-
-        return [
-            self._transform_metric(node)
-            for node in nodes
-            if node.get("metricType") != "DIVIDER"
-        ]
+        """  # noqa: DOC502
+        self._validate_mutual_exclusion(meeting_id, user_id, "meeting_id", "user_id")
+        if meeting_id is None and user_id is None:
+            user_id = await self.get_user_id()
+        query, variables = self._metric_list_request(
+            meeting_id, user_id, frequency=frequency
+        )
+        return self._metrics_from(await self._execute(query, variables))
 
     async def create(
         self,
@@ -880,30 +896,24 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
             raise ValueError(conflict)
         if user_id is None:
             user_id = await self.get_user_id()
-
-        input_: dict[str, Any] = {
-            "title": title,
-            "assignee": user_id,
-            "units": str(units),
-            "rule": str(rule),
-            "frequency": str(frequency),
-            "averageOverrideType": "NONE",
-            "meetings": [meeting_id],
-            "customGoals": [],
-        }
-        if goal is not None:
-            input_["singleGoalValue"] = str(goal)
-        if min_goal is not None:
-            input_["minGoalValue"] = str(min_goal)
-        if max_goal is not None:
-            input_["maxGoalValue"] = str(max_goal)
-        if notes is not None:
-            input_["notesId"] = await self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        data = await self._execute(self._METRIC_CREATE_MUTATION, {"input": input_})
-        metric_id = self._require_created_id(data.get("CreateMetric"), label="metric")
-        return await self.details(metric_id)
+        input_ = self._metric_create_input(
+            meeting_id=meeting_id,
+            title=title,
+            user_id=user_id,
+            units=units,
+            rule=rule,
+            frequency=frequency,
+            goal=goal,
+            min_goal=min_goal,
+            max_goal=max_goal,
+        )
+        result = await self._mutate(
+            self._METRIC_CREATE_MUTATION,
+            {"input": {**input_, **await self._notes_input(notes)}},
+            root_field="CreateMetric",
+            action="create metric",
+        )
+        return await self.details(result["id"])
 
     async def update(
         self,
@@ -944,34 +954,22 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
                 `max_goal` is combined with a non-`BETWEEN` `rule`.
 
         """
-        if all(
-            field is None
-            for field in (title, user_id, goal, min_goal, max_goal, units, rule, notes)
-        ):
+        fields = self._metric_fields(
+            title=title,
+            user_id=user_id,
+            units=units,
+            rule=rule,
+            goal=goal,
+            min_goal=min_goal,
+            max_goal=max_goal,
+        )
+        if not fields and notes is None:
             raise ValueError("At least one field must be provided for update")
-
         conflict = self._metric_goal_conflict(rule, goal, min_goal, max_goal)
         if conflict:
             raise ValueError(conflict)
-
-        input_: dict[str, Any] = {
-            "metricId": metric_id,
-            **self._metric_update_fields(
-                title=title,
-                user_id=user_id,
-                units=units,
-                rule=rule,
-                goal=goal,
-                min_goal=min_goal,
-                max_goal=max_goal,
-            ),
-        }
-        if notes is not None:
-            input_["notesId"] = await self._create_note(notes)
-            input_["collaborationEnabled"] = True
-
-        await self._execute(self._METRIC_EDIT_MUTATION, {"input": input_})
-        return await self.details(metric_id)
+        fields.update(await self._notes_input(notes))
+        return await self._edit(metric_id, fields, action="update metric")
 
     async def archive(self, metric_id: int) -> Metric:
         """Archive a metric.
@@ -987,18 +985,14 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
             The updated `Metric`.
 
         """
-        await self._execute(
-            self._METRIC_EDIT_MUTATION,
-            {"input": {"metricId": metric_id, "archived": True}},
-        )
-        return await self.details(metric_id)
+        return await self._edit(metric_id, {"archived": True}, action="archive metric")
 
     async def scores(
         self,
         metric_id: int,
         *,
-        start: datetime | date | float | int | None = None,
-        end: datetime | date | float | int | None = None,
+        start: TimeInput | None = None,
+        end: TimeInput | None = None,
         include_empty: bool = False,
     ) -> builtins.list[MetricScore]:
         """List the scores of a metric.
@@ -1014,23 +1008,15 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
             A list of `MetricScore` model instances, most recent first.
 
         """
-        start_ts = self._to_timestamp(start) if start is not None else None
-        end_ts = self._to_timestamp(end) if end is not None else None
-        where = self._metric_score_where(start_ts, end_ts)
-
-        data = await self._execute(
-            self._METRIC_SCORES_QUERY, {"metricId": metric_id, "where": where}
-        )
-        nodes = self._scores_from(data)
-        if not include_empty:
-            nodes = [node for node in nodes if node.get("value") not in (None, "")]
-        return [self._transform_score(node) for node in nodes]
+        variables = self._scores_variables(metric_id, start, end)
+        data = await self._execute(self._METRIC_SCORES_QUERY, variables)
+        return self._scores_from(data, include_empty=include_empty)
 
     async def set_score(
         self,
         metric_id: int,
         value: float | str,
-        timestamp: datetime | date | float | int,
+        timestamp: TimeInput,
     ) -> MetricScore:
         """Set a metric's score for a given time.
 
@@ -1052,32 +1038,27 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
             GraphQLError: If `value` cannot be parsed as a decimal number.
 
         """
-        ts = self._to_timestamp(timestamp)
+        ts = to_timestamp(timestamp)
         try:
             data = await self._execute(
                 self._METRIC_SCORE_CREATE_MUTATION,
-                {
-                    "input": {
-                        "metricId": metric_id,
-                        "value": str(value),
-                        "timestamp": ts,
-                    }
-                },
+                {"input": self._score_create_input(metric_id, value, ts)},
             )
         except GraphQLError as exc:
             if not self._is_duplicate_score_error(exc):
                 raise
-            existing = await self._find_score_for_day(metric_id, ts)
+            variables = self._scores_variables(
+                metric_id,
+                ts - _DAILY_SCORE_SEARCH_WINDOW,
+                ts + _DAILY_SCORE_SEARCH_WINDOW,
+            )
+            existing = self._score_on_day(
+                await self._execute(self._METRIC_SCORES_QUERY, variables), ts
+            )
             if existing is None:
                 raise
             return await self.update_score(metric_id, existing.id, value=value)
-
-        result = data.get("CreateMetricScore")
-        if result is None:
-            raise GraphQLError(
-                f"CreateMetricScore: value {value!r} could not be parsed as a number"
-            )
-        return await self._read_score(metric_id, result["id"])
+        return await self._read_score(metric_id, self._created_score_id(data, value))
 
     async def update_score(
         self,
@@ -1103,17 +1084,12 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
             ValueError: If neither `value` nor `notes` is provided.
 
         """
-        if value is None and notes is None:
+        fields = compact(value=_text(value), notesText=notes)
+        if not fields:
             raise ValueError("At least one of `value` or `notes` must be provided")
-
-        input_: dict[str, Any] = {"id": score_id}
-        if value is not None:
-            input_["value"] = str(value)
-        if notes is not None:
-            input_["notesText"] = notes
-
-        await self._execute(self._METRIC_SCORE_EDIT_MUTATION, {"input": input_})
-        return await self._read_score(metric_id, score_id)
+        return await self._edit_score(
+            metric_id, score_id, fields, action="update score"
+        )
 
     async def clear_score(self, metric_id: int, score_id: int) -> MetricScore:
         """Clear a metric score's value, leaving an empty placeholder.
@@ -1127,49 +1103,61 @@ class AsyncMetricOperations(AsyncGraphQLOperations, MetricOperationsMixin):
             The updated `MetricScore`, with `value=None`.
 
         """
-        await self._execute(
-            self._METRIC_SCORE_EDIT_MUTATION, {"input": {"id": score_id, "value": None}}
+        return await self._edit_score(
+            metric_id, score_id, {"value": None}, action="clear score"
+        )
+
+    async def _edit(
+        self, metric_id: int, fields: dict[str, Any], *, action: str
+    ) -> Metric:
+        """Run `EditMetric` with `fields`, then re-read the metric.
+
+        Returns:
+            The updated `Metric`.
+
+        """
+        await self._mutate(
+            self._METRIC_EDIT_MUTATION,
+            {"input": {"metricId": metric_id, **fields}},
+            root_field="EditMetric",
+            action=action,
+        )
+        return await self.details(metric_id)
+
+    async def _edit_score(
+        self, metric_id: int, score_id: int, fields: dict[str, Any], *, action: str
+    ) -> MetricScore:
+        """Run `EditMetricScore` with `fields`, then re-read the score.
+
+        Returns:
+            The updated `MetricScore`.
+
+        """
+        await self._mutate(
+            self._METRIC_SCORE_EDIT_MUTATION,
+            {"input": {"id": score_id, **fields}},
+            root_field="EditMetricScore",
+            action=action,
         )
         return await self._read_score(metric_id, score_id)
 
     async def _read_score(self, metric_id: int, score_id: int) -> MetricScore:
-        """Re-read a single score through its parent metric.
+        """Read a single score through its parent metric.
 
         Returns:
             The `MetricScore` model instance.
 
-        Raises:
-            GraphQLError: If the score is not found under the metric.
-
         """
         data = await self._execute(
             self._METRIC_SCORES_QUERY,
-            {"metricId": metric_id, "where": {"and": [{"id": {"eq": score_id}}]}},
+            {"metricId": metric_id, "where": {"id": {"eq": score_id}}},
         )
-        for node in self._scores_from(data):
-            if node.get("id") == score_id:
-                return self._transform_score(node)
-        raise GraphQLError(f"score {score_id} not found under metric {metric_id}")
-
-    async def _find_score_for_day(
-        self, metric_id: int, ts: float
-    ) -> MetricScore | None:
-        """Find the pre-existing score whose UTC calendar day matches `ts`.
-
-        Used by `set_score()` to fall back to `EditMetricScore` for DAILY
-        metrics, where a placeholder score already exists for every day.
-
-        Returns:
-            The matching `MetricScore`, or `None` if not found.
-
-        """
-        target = datetime.fromtimestamp(ts, tz=UTC).date()
-        where = self._metric_score_where(ts - 172800, ts + 172800)
-        data = await self._execute(
-            self._METRIC_SCORES_QUERY, {"metricId": metric_id, "where": where}
+        return MetricScore.model_validate(
+            self._one(
+                data,
+                "metric",
+                "scoresNonPaginated",
+                label="Metric score",
+                entity_id=score_id,
+            )
         )
-        for node in self._scores_from(data):
-            node_ts = node.get("timestamp")
-            if node_ts is not None and self._same_day(node_ts, target):
-                return self._transform_score(node)
-        return None

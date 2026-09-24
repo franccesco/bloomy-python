@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
-from urllib.parse import urlsplit
 
 import httpx
 
@@ -94,9 +93,12 @@ class AsyncClient:
                 "environment variable, or in ~/.bloomy/config.yaml configuration file."
             )
 
+        # Lazy imports to avoid circular dependencies
+        from .v1 import AsyncV1
+        from .v2 import AsyncV2, default_graphql_url
+
         if graphql_url is None:
-            parsed = urlsplit(base_url)
-            graphql_url = f"{parsed.scheme}://{parsed.netloc}/graphql/"
+            graphql_url = default_graphql_url(base_url)
         self._graphql_url = graphql_url
 
         self._client = httpx.AsyncClient(
@@ -107,10 +109,6 @@ class AsyncClient:
             },
             timeout=timeout,
         )
-
-        # Lazy imports to avoid circular dependencies
-        from .v1 import AsyncV1
-        from .v2 import AsyncV2
 
         # Initialize the v1 (REST) and v2 (GraphQL) operation namespaces,
         # sharing the same httpx client (v2 requests pass an absolute URL,

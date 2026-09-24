@@ -87,7 +87,9 @@ class TestHeadlineOperationsSync:
         client = Mock()
         ops = HeadlineOperations(client, GRAPHQL_URL)
 
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(
+            ValueError, match="Cannot specify both meeting_id and user_id"
+        ):
             ops.list(meeting_id=349524, user_id=1305290)
 
     def test_list_by_meeting_open_only(self) -> None:
@@ -154,26 +156,27 @@ class TestHeadlineOperationsSync:
 
         assert [headline.id for headline in result] == [1, 3]
 
-    def test_list_by_user_filters_archived_client_side(self) -> None:
-        """`list(user_id=...)` drops archived headlines client-side by default.
+    def test_list_by_user_filters_archived_server_side(self) -> None:
+        """`list(user_id=...)` filters archived headlines out with `where`.
 
-        The root `headlines(userId)` connection includes archived headlines
-        with no server-side filter applied here, so `list()` filters them out
-        itself unless `include_archived=True`.
+        The root `headlines(userId)` connection includes archived headlines,
+        so `list()` sends `archived: {eq: false}` unless `include_archived`.
         """
         client = Mock()
         ops = HeadlineOperations(client, GRAPHQL_URL)
-        archived_node = {**HEADLINE_NODE, "id": 999, "archived": True}
         client.post.return_value = _response(
-            {"data": {"headlines": {"nodes": [HEADLINE_NODE, archived_node]}}}
+            {"data": {"headlines": {"nodes": [HEADLINE_NODE]}}}
         )
 
         result = ops.list(user_id=1305290)
 
-        assert len(result) == 1
-        assert result[0].id == 987654
-        variables = client.post.call_args.kwargs["json"]["variables"]
-        assert variables == {"userId": 1305290}
+        assert [headline.id for headline in result] == [987654]
+        payload = client.post.call_args.kwargs["json"]
+        assert payload["variables"] == {
+            "userId": 1305290,
+            "where": {"archived": {"eq": False}},
+        }
+        assert "headlines(userId: $userId, where: $where" in payload["query"]
 
     def test_list_by_user_include_archived_keeps_all(self) -> None:
         """`list(user_id=..., include_archived=True)` keeps archived headlines."""
@@ -187,6 +190,22 @@ class TestHeadlineOperationsSync:
         result = ops.list(user_id=1305290, include_archived=True)
 
         assert {headline.id for headline in result} == {987654, 999}
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables == {"userId": 1305290, "where": None}
+
+    def test_list_by_user_orders_by_creation_date(self) -> None:
+        """User-list headlines come back ordered by creation date."""
+        client = Mock()
+        ops = HeadlineOperations(client, GRAPHQL_URL)
+        newer = {**HEADLINE_NODE, "id": 3, "dateCreated": 300}
+        older = {**HEADLINE_NODE, "id": 1, "dateCreated": 100}
+        client.post.return_value = _response(
+            {"data": {"headlines": {"nodes": [newer, older]}}}
+        )
+
+        result = ops.list(user_id=1305290)
+
+        assert [headline.id for headline in result] == [1, 3]
 
     def test_list_defaults_to_current_user(self) -> None:
         """`list()` with neither id given fetches headlines for the current user."""
@@ -201,7 +220,7 @@ class TestHeadlineOperationsSync:
 
         assert len(result) == 1
         variables = client.post.call_args_list[1].kwargs["json"]["variables"]
-        assert variables == {"userId": 1305290}
+        assert variables == {"userId": 1305290, "where": {"archived": {"eq": False}}}
 
     def test_create_without_notes(self) -> None:
         """`create()` without notes skips `CreateNote` and reads back details."""
@@ -308,9 +327,9 @@ class TestHeadlineOperationsSync:
     def test_update_raises_graphql_error_on_top_level_error(self) -> None:
         """`update()` raises `GraphQLError` when the response carries `errors`.
 
-        Unlike `EditIssue`, `EditHeadline` returns a plain `IdModel { id }`
-        with no `success`/`message` fields, so failures surface only through
-        the top-level GraphQL `errors` array.
+        `EditHeadline` returns a plain `IdModel { id }` with no
+        `success`/`message` fields, so failures surface through the top-level
+        GraphQL `errors` array.
         """
         client = Mock()
         ops = HeadlineOperations(client, GRAPHQL_URL)
@@ -320,6 +339,28 @@ class TestHeadlineOperationsSync:
 
         with pytest.raises(GraphQLError, match="headline not found"):
             ops.update(987654, title="New title")
+
+    def test_update_raises_when_edit_headline_is_null(self) -> None:
+        """`update()` raises `GraphQLError`, without re-reading, on a null result."""
+        client = Mock()
+        ops = HeadlineOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"EditHeadline": None}})
+
+        with pytest.raises(GraphQLError, match="update headline failed"):
+            ops.update(987654, title="New title")
+
+        assert client.post.call_count == 1
+
+    def test_archive_raises_when_edit_headline_id_is_zero(self) -> None:
+        """`archive()` raises `GraphQLError` when `EditHeadline` returns id `0`."""
+        client = Mock()
+        ops = HeadlineOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"EditHeadline": {"id": 0}}})
+
+        with pytest.raises(GraphQLError, match="archive headline failed"):
+            ops.archive(987654)
+
+        assert client.post.call_count == 1
 
     def test_archive(self) -> None:
         """`archive()` sends `archived: true`."""
@@ -599,27 +640,25 @@ class TestHeadlineOperationsAsync:
         client = AsyncMock()
         ops = AsyncHeadlineOperations(client, GRAPHQL_URL)
 
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(
+            ValueError, match="Cannot specify both meeting_id and user_id"
+        ):
             await ops.list(meeting_id=349524, user_id=1305290)
 
     @pytest.mark.asyncio
-    async def test_list_by_user_filters_archived_client_side(self) -> None:
-        """`list(user_id=...)` drops archived headlines client-side by default."""
+    async def test_list_by_user_filters_archived_server_side(self) -> None:
+        """`list(user_id=...)` filters archived headlines out with `where`."""
         client = AsyncMock()
         ops = AsyncHeadlineOperations(client, GRAPHQL_URL)
-        archived_node = {**HEADLINE_NODE, "id": 999, "archived": True}
-        response = MagicMock()
-        response.status_code = 200
-        response.json.return_value = {
-            "data": {"headlines": {"nodes": [HEADLINE_NODE, archived_node]}}
-        }
-        response.raise_for_status = MagicMock()
-        client.post.return_value = response
+        client.post.return_value = _async_response(
+            {"data": {"headlines": {"nodes": [HEADLINE_NODE]}}}
+        )
 
         result = await ops.list(user_id=1305290)
 
-        assert len(result) == 1
-        assert result[0].id == 987654
+        assert [headline.id for headline in result] == [987654]
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables == {"userId": 1305290, "where": {"archived": {"eq": False}}}
 
     @pytest.mark.asyncio
     async def test_update_no_fields_raises(self) -> None:
@@ -689,6 +728,10 @@ class TestHeadlineOperationsAsync:
         await ops.restore(987654)
 
         assert client.post.call_count == 4
+        archive_input = client.post.call_args_list[0].kwargs["json"]["variables"]
+        restore_input = client.post.call_args_list[2].kwargs["json"]["variables"]
+        assert archive_input == {"input": {"headlineId": 987654, "archived": True}}
+        assert restore_input == {"input": {"headlineId": 987654, "archived": False}}
 
     @pytest.mark.asyncio
     async def test_details_with_null_assignee(self) -> None:
@@ -824,6 +867,8 @@ class TestHeadlineOperationsAsync:
         result = await ops.list(user_id=1305290, include_archived=True)
 
         assert {headline.id for headline in result} == {987654, 999}
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables == {"userId": 1305290, "where": None}
 
     @pytest.mark.asyncio
     async def test_list_defaults_to_current_user(self) -> None:
@@ -839,7 +884,7 @@ class TestHeadlineOperationsAsync:
 
         assert len(result) == 1
         variables = client.post.call_args_list[1].kwargs["json"]["variables"]
-        assert variables == {"userId": 1305290}
+        assert variables == {"userId": 1305290, "where": {"archived": {"eq": False}}}
 
     @pytest.mark.asyncio
     async def test_create_without_notes(self) -> None:
@@ -972,3 +1017,51 @@ class TestHeadlineOperationsAsync:
 
         with pytest.raises(GraphQLError, match="headline not found"):
             await ops.update(987654, title="New title")
+
+    @pytest.mark.asyncio
+    async def test_update_raises_when_edit_headline_is_null(self) -> None:
+        """`update()` raises `GraphQLError`, without re-reading, on a null result."""
+        client = AsyncMock()
+        ops = AsyncHeadlineOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"EditHeadline": None}})
+
+        with pytest.raises(GraphQLError, match="update headline failed"):
+            await ops.update(987654, title="New title")
+
+        assert client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_restore_raises_when_edit_headline_id_is_zero(self) -> None:
+        """`restore()` raises `GraphQLError` when `EditHeadline` returns id `0`."""
+        client = AsyncMock()
+        ops = AsyncHeadlineOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response(
+            {"data": {"EditHeadline": {"id": 0}}}
+        )
+
+        with pytest.raises(GraphQLError, match="restore headline failed"):
+            await ops.restore(987654)
+
+        assert client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_update_all_fields_together(self) -> None:
+        """`update()` with every field set sends all of them at once."""
+        client = AsyncMock()
+        ops = AsyncHeadlineOperations(client, GRAPHQL_URL)
+        client.post.side_effect = [
+            _async_response({"data": {"CreateNote": {"success": True, "data": "p"}}}),
+            _async_response({"data": {"EditHeadline": {"id": 987654}}}),
+            _async_response({"data": {"headline": HEADLINE_NODE}}),
+        ]
+
+        await ops.update(987654, title="New title", user_id=42, notes="notes")
+
+        edit_input = client.post.call_args_list[1].kwargs["json"]["variables"]["input"]
+        assert edit_input == {
+            "headlineId": 987654,
+            "title": "New title",
+            "assignee": 42,
+            "notesId": "p",
+            "collaborationEnabled": True,
+        }

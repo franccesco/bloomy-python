@@ -135,51 +135,77 @@ class TestTodoOperationsSync:
         client = Mock()
         ops = TodoOperations(client, GRAPHQL_URL)
 
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(ValueError, match="Cannot specify both meeting_id and"):
             ops.list(meeting_id=349524, user_id=1305290)
+        client.post.assert_not_called()
 
-    def test_list_by_meeting_default_where(self) -> None:
-        """`list(meeting_id=...)` excludes completed and archived to-dos by default."""
+    def test_list_by_meeting_default_reads_active_todos(self) -> None:
+        """`list(meeting_id=...)` reads `todosActives`, filtering out completed."""
         client = Mock()
         ops = TodoOperations(client, GRAPHQL_URL)
         client.post.return_value = _response(
-            {"data": {"meeting": {"todos": {"nodes": [TODO_NODE]}}}}
+            {"data": {"meeting": {"todosActives": {"nodes": [TODO_NODE]}}}}
         )
 
         result = ops.list(meeting_id=349524)
 
-        assert len(result) == 1
-        variables = client.post.call_args.kwargs["json"]["variables"]
-        assert variables["meetingId"] == 349524
-        assert variables["where"] == {
-            "and": [{"completed": {"eq": False}}, {"archived": {"eq": False}}]
+        assert [todo.id for todo in result] == [555001]
+        assert result[0].notes == "some notes"
+        payload = client.post.call_args.kwargs["json"]
+        assert payload["variables"] == {
+            "meetingId": 349524,
+            "where": {"completed": {"eq": False}},
+            "includeArchived": False,
         }
+        assert "@skip(if: $includeArchived)" in payload["query"]
+        assert "@include(if: $includeArchived)" in payload["query"]
 
     def test_list_by_meeting_include_completed_and_archived(self) -> None:
-        """`include_completed=True, include_archived=True` sends no `where` filter."""
+        """`include_completed` and `include_archived` read every to-do, unfiltered."""
         client = Mock()
         ops = TodoOperations(client, GRAPHQL_URL)
         client.post.return_value = _response(
             {"data": {"meeting": {"todos": {"nodes": [TODO_NODE]}}}}
         )
 
-        ops.list(meeting_id=349524, include_completed=True, include_archived=True)
+        result = ops.list(
+            meeting_id=349524, include_completed=True, include_archived=True
+        )
 
+        assert [todo.id for todo in result] == [555001]
         variables = client.post.call_args.kwargs["json"]["variables"]
         assert variables["where"] is None
+        assert variables["includeArchived"] is True
 
     def test_list_by_meeting_include_completed_only(self) -> None:
-        """`include_completed=True` alone still filters out archived to-dos."""
+        """`include_completed=True` alone reads `todosActives` with no filter."""
         client = Mock()
         ops = TodoOperations(client, GRAPHQL_URL)
         client.post.return_value = _response(
-            {"data": {"meeting": {"todos": {"nodes": [TODO_NODE]}}}}
+            {"data": {"meeting": {"todosActives": {"nodes": [TODO_NODE]}}}}
         )
 
         ops.list(meeting_id=349524, include_completed=True)
 
         variables = client.post.call_args.kwargs["json"]["variables"]
-        assert variables["where"] == {"and": [{"archived": {"eq": False}}]}
+        assert variables["where"] is None
+        assert variables["includeArchived"] is False
+
+    def test_list_by_meeting_include_archived_only(self) -> None:
+        """`include_archived=True` alone reads `todos`, filtering out completed."""
+        client = Mock()
+        ops = TodoOperations(client, GRAPHQL_URL)
+        archived = {**TODO_NODE, "id": 555002, "archived": True}
+        client.post.return_value = _response(
+            {"data": {"meeting": {"todos": {"nodes": [TODO_NODE, archived]}}}}
+        )
+
+        result = ops.list(meeting_id=349524, include_archived=True)
+
+        assert [todo.archived for todo in result] == [False, True]
+        variables = client.post.call_args.kwargs["json"]["variables"]
+        assert variables["where"] == {"completed": {"eq": False}}
+        assert variables["includeArchived"] is True
 
     def test_list_by_meeting_missing_meeting_returns_empty(self) -> None:
         """A `null` `meeting` (e.g. bad id) produces an empty list, not an error."""
@@ -216,7 +242,10 @@ class TestTodoOperationsSync:
 
         assert len(result) == 1
         list_variables = client.post.call_args_list[1].kwargs["json"]["variables"]
-        assert list_variables["userId"] == 1305290
+        assert list_variables == {
+            "userId": 1305290,
+            "where": {"completed": {"eq": False}},
+        }
 
     def test_list_by_user_explicit_id(self) -> None:
         """`list(user_id=...)` queries the root `todos(userId)` connection."""
@@ -234,13 +263,11 @@ class TestTodoOperationsSync:
         sent_query = client.post.call_args.kwargs["json"]["query"]
         assert "todos(userId" in sent_query
 
-    def test_list_by_user_include_archived_where_still_sent(self) -> None:
-        """`list(user_id=..., include_archived=True)` still builds a `where`.
+    def test_list_by_user_ignores_include_archived(self) -> None:
+        """`include_archived` sends nothing extra when listing by `user_id`.
 
-        The API ignores the `archived` clause server-side for the
-        user-scoped connection (see `list()`'s docstring), but the client
-        builds `where` the same way regardless of scope: only the
-        `completed` clause survives here.
+        `todos(userId)` excludes archived to-dos server-side, so the query has
+        no include-archived variant.
         """
         client = Mock()
         ops = TodoOperations(client, GRAPHQL_URL)
@@ -248,10 +275,10 @@ class TestTodoOperationsSync:
             {"data": {"todos": {"nodes": [TODO_NODE]}}}
         )
 
-        ops.list(user_id=1305290, include_archived=True)
+        ops.list(user_id=1305290, include_completed=True, include_archived=True)
 
         variables = client.post.call_args.kwargs["json"]["variables"]
-        assert variables["where"] == {"and": [{"completed": {"eq": False}}]}
+        assert variables == {"userId": 1305290, "where": None}
 
     def test_list_by_user_missing_todos_returns_empty(self) -> None:
         """A missing `todos` connection produces an empty list, not an error."""
@@ -269,8 +296,7 @@ class TestTodoOperationsSync:
         ops = TodoOperations(client, GRAPHQL_URL)
         client.post.side_effect = [
             _response({"data": {"getAuthenticatedUserId": {"id": 1305290}}}),
-            _response({"data": {"CreateTodo": {"id": 555001}}}),
-            _response({"data": {"todo": TODO_NODE}}),
+            _response({"data": {"CreateTodo": TODO_NODE}}),
         ]
 
         result = ops.create("SDK v2 test to-do", meeting_id=349524)
@@ -289,39 +315,68 @@ class TestTodoOperationsSync:
         assert due_date.date() == expected_date
         assert due_date.time() == time(0, 0)
 
+    def test_create_returns_mutation_result_without_rereading(self) -> None:
+        """`create()` validates the `CreateTodo` result instead of re-reading."""
+        client = Mock()
+        ops = TodoOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"CreateTodo": TODO_NODE}})
+
+        result = ops.create("SDK v2 test to-do", meeting_id=349524, user_id=1305290)
+
+        assert client.post.call_count == 1
+        assert result.title == "SDK v2 test to-do"
+        assert result.owner is not None and result.owner.full_name == "Fran Orozco"
+        assert result.meeting is not None and result.meeting.name == "v2 API"
+        assert result.notes == "some notes"
+        sent_query = client.post.call_args.kwargs["json"]["query"]
+        assert "CreateTodo(input: $input)" in sent_query
+        assert "assignee { id fullName }" in sent_query
+        assert "meeting { id name }" in sent_query
+        assert "notesText" in sent_query
+
     def test_create_personal_todo_sends_null_meeting_id(self) -> None:
         """`create()` without `meeting_id` sends `meetingRecurrenceId: null`."""
         client = Mock()
         ops = TodoOperations(client, GRAPHQL_URL)
-        client.post.side_effect = [
-            _response({"data": {"CreateTodo": {"id": 555001}}}),
-            _response({"data": {"todo": TODO_NODE}}),
-        ]
+        client.post.return_value = _response(
+            {"data": {"CreateTodo": {**TODO_NODE, "meeting": None}}}
+        )
 
-        ops.create("Personal to-do", user_id=1305290)
+        result = ops.create("Personal to-do", user_id=1305290)
 
-        create_variables = client.post.call_args_list[0].kwargs["json"]["variables"]
+        assert result.meeting is None
+        create_variables = client.post.call_args.kwargs["json"]["variables"]
         assert create_variables["input"]["meetingRecurrenceId"] is None
 
     def test_create_raises_when_create_todo_id_is_zero(self) -> None:
         """`create()` raises `GraphQLError` when `CreateTodo` returns id `0`."""
         client = Mock()
         ops = TodoOperations(client, GRAPHQL_URL)
-        client.post.return_value = _response({"data": {"CreateTodo": {"id": 0}}})
+        client.post.return_value = _response(
+            {"data": {"CreateTodo": {**TODO_NODE, "id": 0}}}
+        )
 
-        with pytest.raises(GraphQLError, match="create todo failed"):
+        with pytest.raises(GraphQLError, match="create todo failed: no id returned"):
             ops.create("SDK v2 test to-do", user_id=1305290)
 
         assert client.post.call_count == 1
+
+    def test_create_raises_when_create_todo_is_null(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateTodo` is `null`."""
+        client = Mock()
+        ops = TodoOperations(client, GRAPHQL_URL)
+        client.post.return_value = _response({"data": {"CreateTodo": None}})
+
+        with pytest.raises(
+            GraphQLError, match="create todo failed: no result returned"
+        ):
+            ops.create("SDK v2 test to-do", user_id=1305290)
 
     def test_create_with_explicit_due_date(self) -> None:
         """`create(due_date=...)` converts the given date to a unix timestamp."""
         client = Mock()
         ops = TodoOperations(client, GRAPHQL_URL)
-        client.post.side_effect = [
-            _response({"data": {"CreateTodo": {"id": 555001}}}),
-            _response({"data": {"todo": TODO_NODE}}),
-        ]
+        client.post.return_value = _response({"data": {"CreateTodo": TODO_NODE}})
 
         ops.create(
             "SDK v2 test to-do",
@@ -338,10 +393,7 @@ class TestTodoOperationsSync:
         """`create(due_date=<aware datetime>)` preserves the time-of-day."""
         client = Mock()
         ops = TodoOperations(client, GRAPHQL_URL)
-        client.post.side_effect = [
-            _response({"data": {"CreateTodo": {"id": 555001}}}),
-            _response({"data": {"todo": TODO_NODE}}),
-        ]
+        client.post.return_value = _response({"data": {"CreateTodo": TODO_NODE}})
         due = datetime(2026, 10, 1, 15, 30, tzinfo=UTC)
 
         ops.create(
@@ -357,14 +409,14 @@ class TestTodoOperationsSync:
         ops = TodoOperations(client, GRAPHQL_URL)
         client.post.side_effect = [
             _response({"data": {"CreateNote": {"success": True, "data": "pad-99"}}}),
-            _response({"data": {"CreateTodo": {"id": 555001}}}),
-            _response({"data": {"todo": TODO_NODE}}),
+            _response({"data": {"CreateTodo": TODO_NODE}}),
         ]
 
         ops.create(
             "SDK v2 test to-do", meeting_id=349524, user_id=1305290, notes="hello"
         )
 
+        assert client.post.call_count == 2
         note_variables = client.post.call_args_list[0].kwargs["json"]["variables"]
         assert note_variables == {"text": "hello"}
         create_variables = client.post.call_args_list[1].kwargs["json"]["variables"]
@@ -701,41 +753,55 @@ class TestTodoOperationsAsync:
         client = AsyncMock()
         ops = AsyncTodoOperations(client, GRAPHQL_URL)
 
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(ValueError, match="Cannot specify both meeting_id and"):
             await ops.list(meeting_id=349524, user_id=1305290)
         client.post.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_list_by_meeting_default_where(self) -> None:
-        """`list(meeting_id=...)` excludes completed and archived to-dos by default."""
+    async def test_list_by_meeting_default_reads_active_todos(self) -> None:
+        """`list(meeting_id=...)` reads `todosActives`, filtering out completed."""
         client = AsyncMock()
         ops = AsyncTodoOperations(client, GRAPHQL_URL)
         client.post.return_value = _async_response(
-            {"data": {"meeting": {"todos": {"nodes": [TODO_NODE]}}}}
+            {"data": {"meeting": {"todosActives": {"nodes": [TODO_NODE]}}}}
         )
 
         result = await ops.list(meeting_id=349524)
 
-        assert len(result) == 1
+        assert [todo.id for todo in result] == [555001]
         variables = client.post.call_args.kwargs["json"]["variables"]
-        assert variables["meetingId"] == 349524
-        assert variables["where"] == {
-            "and": [{"completed": {"eq": False}}, {"archived": {"eq": False}}]
+        assert variables == {
+            "meetingId": 349524,
+            "where": {"completed": {"eq": False}},
+            "includeArchived": False,
         }
 
     @pytest.mark.asyncio
     async def test_list_by_meeting_include_completed_and_archived(self) -> None:
-        """`include_completed=True, include_archived=True` sends no `where` filter."""
+        """`include_completed` and `include_archived` read every to-do, unfiltered."""
         client = AsyncMock()
         ops = AsyncTodoOperations(client, GRAPHQL_URL)
         client.post.return_value = _async_response(
             {"data": {"meeting": {"todos": {"nodes": [TODO_NODE]}}}}
         )
 
-        await ops.list(meeting_id=349524, include_completed=True, include_archived=True)
+        result = await ops.list(
+            meeting_id=349524, include_completed=True, include_archived=True
+        )
 
+        assert [todo.id for todo in result] == [555001]
         variables = client.post.call_args.kwargs["json"]["variables"]
         assert variables["where"] is None
+        assert variables["includeArchived"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_by_meeting_missing_meeting_returns_empty(self) -> None:
+        """A `null` `meeting` (e.g. bad id) produces an empty list, not an error."""
+        client = AsyncMock()
+        ops = AsyncTodoOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"meeting": None}})
+
+        assert await ops.list(meeting_id=999999) == []
 
     @pytest.mark.asyncio
     async def test_list_raises_graphql_error_on_200_with_errors(self) -> None:
@@ -800,13 +866,14 @@ class TestTodoOperationsAsync:
         ops = AsyncTodoOperations(client, GRAPHQL_URL)
         client.post.side_effect = [
             _async_response({"data": {"getAuthenticatedUserId": {"id": 1305290}}}),
-            _async_response({"data": {"CreateTodo": {"id": 555001}}}),
-            _async_response({"data": {"todo": TODO_NODE}}),
+            _async_response({"data": {"CreateTodo": TODO_NODE}}),
         ]
 
         result = await ops.create("SDK v2 test to-do", meeting_id=349524)
 
         assert result.id == 555001
+        assert result.notes == "some notes"
+        assert client.post.call_count == 2
         create_variables = client.post.call_args_list[1].kwargs["json"]["variables"]
         input_ = create_variables["input"]
         assert input_["title"] == "SDK v2 test to-do"
@@ -824,14 +891,14 @@ class TestTodoOperationsAsync:
         """`create()` without `meeting_id` sends `meetingRecurrenceId: null`."""
         client = AsyncMock()
         ops = AsyncTodoOperations(client, GRAPHQL_URL)
-        client.post.side_effect = [
-            _async_response({"data": {"CreateTodo": {"id": 555001}}}),
-            _async_response({"data": {"todo": TODO_NODE}}),
-        ]
+        client.post.return_value = _async_response(
+            {"data": {"CreateTodo": {**TODO_NODE, "meeting": None}}}
+        )
 
-        await ops.create("Personal to-do", user_id=1305290)
+        result = await ops.create("Personal to-do", user_id=1305290)
 
-        create_variables = client.post.call_args_list[0].kwargs["json"]["variables"]
+        assert result.meeting is None
+        create_variables = client.post.call_args.kwargs["json"]["variables"]
         assert create_variables["input"]["meetingRecurrenceId"] is None
 
     @pytest.mark.asyncio
@@ -839,22 +906,33 @@ class TestTodoOperationsAsync:
         """`create()` raises `GraphQLError` when `CreateTodo` returns id `0`."""
         client = AsyncMock()
         ops = AsyncTodoOperations(client, GRAPHQL_URL)
-        client.post.return_value = _async_response({"data": {"CreateTodo": {"id": 0}}})
+        client.post.return_value = _async_response(
+            {"data": {"CreateTodo": {**TODO_NODE, "id": 0}}}
+        )
 
-        with pytest.raises(GraphQLError, match="create todo failed"):
+        with pytest.raises(GraphQLError, match="create todo failed: no id returned"):
             await ops.create("SDK v2 test to-do", user_id=1305290)
 
         assert client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_create_raises_when_create_todo_is_null(self) -> None:
+        """`create()` raises `GraphQLError` when `CreateTodo` is `null`."""
+        client = AsyncMock()
+        ops = AsyncTodoOperations(client, GRAPHQL_URL)
+        client.post.return_value = _async_response({"data": {"CreateTodo": None}})
+
+        with pytest.raises(
+            GraphQLError, match="create todo failed: no result returned"
+        ):
+            await ops.create("SDK v2 test to-do", user_id=1305290)
 
     @pytest.mark.asyncio
     async def test_create_with_explicit_due_date(self) -> None:
         """`create(due_date=...)` converts the given date to a unix timestamp."""
         client = AsyncMock()
         ops = AsyncTodoOperations(client, GRAPHQL_URL)
-        client.post.side_effect = [
-            _async_response({"data": {"CreateTodo": {"id": 555001}}}),
-            _async_response({"data": {"todo": TODO_NODE}}),
-        ]
+        client.post.return_value = _async_response({"data": {"CreateTodo": TODO_NODE}})
 
         await ops.create(
             "SDK v2 test to-do",
@@ -876,8 +954,7 @@ class TestTodoOperationsAsync:
             _async_response(
                 {"data": {"CreateNote": {"success": True, "data": "pad-99"}}}
             ),
-            _async_response({"data": {"CreateTodo": {"id": 555001}}}),
-            _async_response({"data": {"todo": TODO_NODE}}),
+            _async_response({"data": {"CreateTodo": TODO_NODE}}),
         ]
 
         result = await ops.create(
@@ -885,6 +962,7 @@ class TestTodoOperationsAsync:
         )
 
         assert result.id == 555001
+        assert client.post.call_count == 2
         note_variables = client.post.call_args_list[0].kwargs["json"]["variables"]
         assert note_variables == {"text": "hello"}
         create_variables = client.post.call_args_list[1].kwargs["json"]["variables"]

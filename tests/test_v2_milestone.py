@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 
 from bloomy.exceptions import GraphQLError
+from bloomy.v2.base import MILESTONES_CONNECTION
 from bloomy.v2.models import Milestone
 from bloomy.v2.operations.milestone import AsyncMilestoneOperations, MilestoneOperations
 
@@ -59,7 +60,8 @@ class TestMilestoneOperationsSync:
         assert result[0].goal_id == 5265048
         variables = client.post.call_args.kwargs["json"]["variables"]
         assert variables == {"goalId": 5265048}
-        # Transform: unix-seconds timestamp becomes a UTC-aware datetime.
+        assert MILESTONES_CONNECTION in client.post.call_args.kwargs["json"]["query"]
+        # Unix-seconds timestamps become UTC-aware datetimes.
         assert result[0].due_date.tzinfo is not None
 
     def test_list_with_null_goal_returns_empty(self) -> None:
@@ -230,7 +232,7 @@ class TestMilestoneOperationsSync:
             {"data": {"goal": {"milestones": {"nodes": []}}}}
         )
 
-        with pytest.raises(GraphQLError, match="not found"):
+        with pytest.raises(GraphQLError, match="Milestone 6440354 not found"):
             ops.update(6440354, goal_id=999999, title="Updated")
 
         assert client.post.call_count == 1
@@ -259,8 +261,24 @@ class TestMilestoneOperationsSync:
 
         assert result.completed is True
         assert client.post.call_count == 3
+        verify_variables = client.post.call_args_list[0].kwargs["json"]["variables"]
+        assert verify_variables == {"goalId": 5265048, "milestoneId": 6440354}
         edit_input = client.post.call_args_list[1].kwargs["json"]["variables"]["input"]
         assert edit_input == {"milestoneId": 6440354, "completed": True}
+
+    def test_update_raises_when_edit_milestone_returns_null(self) -> None:
+        """A `null` `EditMilestone` result raises `GraphQLError` without a re-read."""
+        client = Mock()
+        ops = MilestoneOperations(client, GRAPHQL_URL)
+        client.post.side_effect = [
+            _response({"data": {"goal": {"milestones": {"nodes": [MILESTONE_NODE]}}}}),
+            _response({"data": {"EditMilestone": None}}),
+        ]
+
+        with pytest.raises(GraphQLError, match="update milestone failed"):
+            ops.update(6440354, goal_id=5265048, title="Updated")
+
+        assert client.post.call_count == 2
 
     def test_complete_wrong_goal_id_raises_without_writing(self) -> None:
         """A `goal_id` that does not own `milestone_id` raises before any write."""
@@ -270,7 +288,7 @@ class TestMilestoneOperationsSync:
             {"data": {"goal": {"milestones": {"nodes": []}}}}
         )
 
-        with pytest.raises(GraphQLError, match="not found"):
+        with pytest.raises(GraphQLError, match="Milestone 6440354 not found"):
             ops.complete(6440354, goal_id=999999)
 
         assert client.post.call_count == 1
@@ -500,6 +518,8 @@ class TestMilestoneOperationsAsync:
 
         assert result.completed is True
         assert client.post.call_count == 3
+        edit_input = client.post.call_args_list[1].kwargs["json"]["variables"]["input"]
+        assert edit_input == {"milestoneId": 6440354, "completed": True}
 
     @pytest.mark.asyncio
     async def test_complete_wrong_goal_id_raises_without_writing(self) -> None:

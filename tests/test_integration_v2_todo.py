@@ -179,9 +179,56 @@ class TestTodoLifecycleSync:
         finally:
             client.v2.todo.archive(created.id)
 
+    def test_list_include_flags_by_meeting(self, client: Client) -> None:
+        """Each include-flag combination lists the to-dos it should, live.
+
+        The default and `include_completed` lists read `todosActives` (which
+        keeps completed to-dos and drops archived ones); `include_archived`
+        lists read `todos`.
+        """
+        tag = uuid.uuid4().hex[:8]
+        created = client.v2.todo.create(_title(tag), meeting_id=MEETING_ID)
+
+        def listed(**flags: bool) -> bool:
+            todos = client.v2.todo.list(meeting_id=MEETING_ID, **flags)
+            return any(t.id == created.id for t in todos)
+
+        try:
+            assert listed()
+
+            client.v2.todo.complete(created.id)
+            assert not listed()
+            assert listed(include_completed=True)
+
+            client.v2.todo.archive(created.id)
+            assert not listed(include_completed=True)
+            assert not listed(include_archived=True)
+            assert listed(include_completed=True, include_archived=True)
+        finally:
+            client.v2.todo.archive(created.id)
+
+    def test_create_result_matches_details(self, client: Client) -> None:
+        """`create()`'s result (no re-read) matches a later `details()` read.
+
+        `created_date` is compared to the second: the mutation result keeps
+        sub-second precision that the stored value rounds away.
+        """
+        tag = uuid.uuid4().hex[:8]
+        created = client.v2.todo.create(_title(tag), meeting_id=MEETING_ID)
+
+        try:
+            details = client.v2.todo.details(created.id)
+            assert created.model_dump(exclude={"created_date"}) == details.model_dump(
+                exclude={"created_date"}
+            )
+            delta = created.created_date - details.created_date
+            assert abs(delta.total_seconds()) < 1
+        finally:
+            client.v2.todo.archive(created.id)
+
     def test_list_requires_only_one_scope(self, client: Client) -> None:
         """`list()` with both `meeting_id` and `user_id` raises `ValueError`."""
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(ValueError, match="Cannot specify both meeting_id and"):
             client.v2.todo.list(meeting_id=MEETING_ID, user_id=1305290)
 
     def test_update_requires_a_field(self, client: Client) -> None:

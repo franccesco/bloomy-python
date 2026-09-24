@@ -156,7 +156,7 @@ return-type documentation lives on each entity's API reference page.
 | Method | Signature | Description |
 |---|---|---|
 | `details()` | `details(headline_id) -> Headline` | Get a headline. |
-| `list()` | `list(meeting_id=None, user_id=None, include_archived=False) -> list[Headline]` | List headlines for a meeting or a user (mutually exclusive). |
+| `list()` | `list(meeting_id=None, user_id=None, *, include_archived=False) -> list[Headline]` | List headlines for a meeting or a user (mutually exclusive). |
 | `create()` | `create(meeting_id, title, user_id=None, notes=None) -> Headline` | Create a headline. |
 | `update()` | `update(headline_id, *, title=None, user_id=None, notes=None) -> Headline` | Update a headline. |
 | `archive()` | `archive(headline_id) -> Headline` | Archive a headline. |
@@ -201,14 +201,26 @@ return-type documentation lives on each entity's API reference page.
 | Method | Signature | Description |
 |---|---|---|
 | `details()` | `details(metric_id) -> Metric` | Get a metric. |
-| `list()` | `list(meeting_id=None, user_id=None, frequency=None) -> list[Metric]` | List metrics for a meeting or a user (mutually exclusive). |
+| `list()` | `list(meeting_id=None, user_id=None, *, frequency=None) -> list[Metric]` | List metrics for a meeting or a user (mutually exclusive). |
 | `create()` | `create(meeting_id, title, user_id=None, goal=None, units=MetricUnit.NONE, rule=MetricRule.GREATER_THAN, frequency=MetricFrequency.WEEKLY, min_goal=None, max_goal=None, notes=None) -> Metric` | Create a metric. |
 | `update()` | `update(metric_id, *, title=None, user_id=None, goal=None, min_goal=None, max_goal=None, units=None, rule=None, notes=None) -> Metric` | Update a metric. |
 | `archive()` | `archive(metric_id) -> Metric` | Archive a metric. There is no `restore()`. |
-| `scores()` | `scores(metric_id, start=None, end=None, include_empty=False) -> list[MetricScore]` | List a metric's scores, most recent first. |
+| `scores()` | `scores(metric_id, *, start=None, end=None, include_empty=False) -> list[MetricScore]` | List a metric's scores, most recent first. |
 | `set_score()` | `set_score(metric_id, value, timestamp) -> MetricScore` | Set a score for a given time. |
 | `update_score()` | `update_score(metric_id, score_id, *, value=None, notes=None) -> MetricScore` | Update an existing score's value and/or note. |
 | `clear_score()` | `clear_score(metric_id, score_id) -> MetricScore` | Clear a score's value, leaving an empty placeholder. |
+
+## Dates and times
+
+Parameters such as `due_date`, `timestamp`, `start`, and `end` accept any of:
+
+- a `datetime` (a naive `datetime` is treated as UTC),
+- a `date` (00:00 UTC of that day),
+- unix seconds as an `int` or `float`,
+- an ISO 8601 string, such as `"2026-09-21"` or `"2026-09-21T10:30:00+02:00"`.
+
+Date fields on v2 models (`due_date`, `created_date`, `completed_date`, and so
+on) are timezone-aware UTC `datetime` objects.
 
 ## Description ("notes") behavior
 
@@ -312,14 +324,16 @@ A `GraphQLError` is raised for:
 - A mutation result shaped `{success, message, errorDetails}` where `success`
   is `false` (used by, for example, `issue.update()` and
   `milestone.delete()`).
+- A mutation that returns a `null` result, or an `{id}` result whose id is
+  `0`.
 
 !!! note "Some v2 mutations return only `{id}`"
     A few mutations (`headline`/`goal`/`milestone`/`metric` create and edit)
     return only `IdModel { id }` rather than the
-    `{success, message, errorDetails}` shape. For those, failures surface
-    exclusively through the top-level `errors` array — there is no
-    `success: false` body to check. This is transparent to callers: either
-    way, a failed write raises `GraphQLError`.
+    `{success, message, errorDetails}` shape. There is no `success: false`
+    body to check, so the SDK treats a top-level `errors` array, a `null`
+    result, or an id of `0` as a failure. Either way, a failed write raises
+    `GraphQLError`.
 
 ```python
 from bloomy import Client, GraphQLError

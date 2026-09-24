@@ -240,7 +240,9 @@ class TestMetricLifecycleSync:
 
     def test_list_requires_only_one_scope(self, client: Client) -> None:
         """`list()` with both `meeting_id` and `user_id` raises `ValueError`."""
-        with pytest.raises(ValueError, match="not both"):
+        with pytest.raises(
+            ValueError, match="Cannot specify both meeting_id and user_id"
+        ):
             client.v2.metric.list(meeting_id=MEETING_ID, user_id=1305290)
 
     def test_update_requires_a_field(self, client: Client) -> None:
