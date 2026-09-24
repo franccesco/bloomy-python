@@ -52,6 +52,7 @@ The Bloomy Python SDK is organized as a client-based architecture where all API 
    - Initializes httpx client with authentication headers
    - Creates instances of all operation classes
    - Supports context manager protocol
+   - Exposes two namespaces sharing the same httpx client and API key: `client.v1` (the REST API; top-level attributes like `client.user`/`client.meeting` are aliases onto `client.v1.*`, kept for backward compatibility) and `client.v2` (the GraphQL API at `graphql_url`, defaulting to the scheme/host of `base_url` plus `/graphql/`) — see "v2 (GraphQL) Operations Pattern" below
 
 2. **Configuration (`src/bloomy/configuration.py`)**:
    - Manages API key from multiple sources (direct, env var, config file)
@@ -68,14 +69,22 @@ The Bloomy Python SDK is organized as a client-based architecture where all API 
    - Generic bulk operations logic is provided in base classes (`_validate_bulk_item`, `_process_bulk_sync`, `_process_bulk_async`)
    - Operations are accessed via client attributes: `client.user`, `client.meeting`, etc.
 
-4. **Models (`src/bloomy/models.py`)**:
+4. **v2 (GraphQL) Operations Pattern (`src/bloomy/v2/`)**:
+   - `client.v2` is the GraphQL namespace, separate from `client.v1`'s REST namespace above; it covers the same entities (users, meetings, issues, headlines, todos, goals, milestones, metrics) through GraphQL documents instead of REST calls
+   - Transport and shared helpers live in `src/bloomy/v2/base.py`: module-level functions (`to_timestamp`, `default_due_date`, `compact`, `dig_nodes`, `merge_nodes`), shared field constants (`NOTES_FIELDS`, `USER_REF_FIELDS`, `MEETING_REF_FIELDS`, `MILESTONES_CONNECTION`), and methods on the base classes: `_mutate` (runs a mutation and checks its result), `_one` (reads one entity or raises "not found"), and `_notes_input` (creates the notes pad for a create/edit input). `AbstractGraphQLOperations` subclasses v1's `AbstractOperations`, so meeting_id/user_id checks use `_validate_mutual_exclusion`. One `UserIdCache` per client shares the current user's id across all v2 operations objects
+   - Models live in `src/bloomy/v2/models.py`. They inherit `GqlBaseModel`, which validates the raw camelCase keys (field names also work, so `model_dump()` round-trips) and fills `notes` from the notes fields, so operations return `Model.model_validate(raw_node)` with no per-entity transform code
+   - Unlike v1, each entity's GraphQL documents, input builders, and sync/async operations classes live together in one module under `src/bloomy/v2/operations/` (e.g. `operations/issue.py` holds `IssueOperationsMixin`, `IssueOperations`, and `AsyncIssueOperations` side by side), instead of v1's separate `operations/`, `operations/async_/`, and `operations/mixins/` directories
+   - Each entity module's mixin (`<Entity>OperationsMixin`) holds the GraphQL documents and static builders such as `_todo_list_request`, `_todos_from`, `_todo_create_input`, and `_todo_edit_fields`; the sync and async classes, which inherit it alongside `GraphQLOperations`/`AsyncGraphQLOperations`, only execute and return. Updates and state changes (archive/restore/solve/complete) go through a per-class `_edit(entity_id, fields, *, action)` helper that runs the edit mutation and re-reads the entity (milestones instead delegate `complete()` to `update()`)
+   - Operations are accessed via `client.v2.user`, `client.v2.issue`, etc.
+
+5. **Models (`src/bloomy/models.py`)**:
    - Pydantic models for type-safe API responses
    - All models inherit from `BloomyBaseModel` with common config
    - Field aliases map PascalCase API responses to snake_case Python attributes
    - Reusable annotated types: `OptionalDatetime` and `OptionalFloat` using Pydantic's `BeforeValidator`
    - Some models are type aliases for backward compatibility (e.g., `HeadlineListItem = HeadlineDetails`)
 
-5. **API Endpoints**:
+6. **API Endpoints**:
    - Base URL: `https://app.bloomgrowth.com/api/v1`
    - Authentication: Bearer token in Authorization header
    - All responses are JSON

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `client.v1` and `client.v2` API paths on `Client` and `AsyncClient`. `client.v1` holds the existing REST v1 operations; the top-level attributes (`client.user`, `client.issue`, ...) remain aliases of the same objects.
+- `client.v2`: operations backed by Bloom Growth's GraphQL API (the API the web app uses), with sync and async classes for users, meetings, issues, headlines, to-dos, goals, milestones, and metrics with scores. It uses the same API key as v1.
+- v2 descriptions: `notes` on create/update is stored as a note pad (as the web app does) and read back as plain text.
+- v2 metric scores: `scores()`, `set_score()` (upsert per week/month/quarter; daily scores are edited in place), `update_score()` (value and cell note), and `clear_score()`.
+- `graphql_url` parameter on `Client` and `AsyncClient` (defaults to the host of `base_url` plus `/graphql/`).
+- `GraphQLError` exception (subclass of `APIError`) with the raw GraphQL `errors`.
+- v2 pydantic models in `bloomy.v2.models`, with timezone-aware UTC datetimes; v2 date parameters accept `datetime`, `date`, unix seconds, or ISO 8601 strings.
+
 ## [0.21.0] - 2026-01-09
 
 ### Changed

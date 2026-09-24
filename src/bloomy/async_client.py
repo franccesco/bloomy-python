@@ -21,6 +21,8 @@ if TYPE_CHECKING:
         AsyncTodoOperations,
         AsyncUserOperations,
     )
+    from .v1 import AsyncV1
+    from .v2 import AsyncV2
 
 
 class AsyncClient:
@@ -28,6 +30,10 @@ class AsyncClient:
 
     This client provides async access to all Bloomy API operations including
     users, meetings, todos, goals, headlines, issues, and scorecards.
+
+    `client.v1` groups the REST API operations; the top-level attributes are
+    aliases of `client.v1.*`, kept for backward compatibility. `client.v2`
+    groups the GraphQL API operations (`user`, `meeting`, `issue`, ...).
 
     Args:
         api_key: The API key for authentication. If not provided, it will be loaded
@@ -64,6 +70,7 @@ class AsyncClient:
         api_key: str | None = None,
         base_url: str = "https://app.bloomgrowth.com/api/v1",
         timeout: float = 30.0,
+        graphql_url: str | None = None,
     ) -> None:
         """Initialize the async Bloomy client.
 
@@ -71,6 +78,8 @@ class AsyncClient:
             api_key: The API key for authentication.
             base_url: The base URL for the API.
             timeout: The timeout in seconds for HTTP requests. Defaults to 30.0.
+            graphql_url: The absolute URL of the v2 GraphQL endpoint. Defaults to
+                the scheme and host of `base_url` plus `/graphql/`.
 
         Raises:
             ConfigurationError: If no API key is provided or found in configuration.
@@ -84,6 +93,14 @@ class AsyncClient:
                 "environment variable, or in ~/.bloomy/config.yaml configuration file."
             )
 
+        # Lazy imports to avoid circular dependencies
+        from .v1 import AsyncV1
+        from .v2 import AsyncV2, default_graphql_url
+
+        if graphql_url is None:
+            graphql_url = default_graphql_url(base_url)
+        self._graphql_url = graphql_url
+
         self._client = httpx.AsyncClient(
             base_url=base_url,
             headers={
@@ -93,24 +110,21 @@ class AsyncClient:
             timeout=timeout,
         )
 
-        # Lazy imports to avoid circular dependencies
-        from .operations.async_.goals import AsyncGoalOperations
-        from .operations.async_.headlines import AsyncHeadlineOperations
-        from .operations.async_.issues import AsyncIssueOperations
-        from .operations.async_.meetings import AsyncMeetingOperations
-        from .operations.async_.scorecard import AsyncScorecardOperations
-        from .operations.async_.todos import AsyncTodoOperations
-        from .operations.async_.users import AsyncUserOperations
+        # Initialize the v1 (REST) and v2 (GraphQL) operation namespaces,
+        # sharing the same httpx client (v2 requests pass an absolute URL,
+        # which overrides the client's base_url).
+        self.v1: AsyncV1 = AsyncV1(self._client)
+        self.v2: AsyncV2 = AsyncV2(self._client, self._graphql_url)
 
-        self.user: AsyncUserOperations = AsyncUserOperations(self._client)
-        self.meeting: AsyncMeetingOperations = AsyncMeetingOperations(self._client)
-        self.todo: AsyncTodoOperations = AsyncTodoOperations(self._client)
-        self.goal: AsyncGoalOperations = AsyncGoalOperations(self._client)
-        self.headline: AsyncHeadlineOperations = AsyncHeadlineOperations(self._client)
-        self.issue: AsyncIssueOperations = AsyncIssueOperations(self._client)
-        self.scorecard: AsyncScorecardOperations = AsyncScorecardOperations(
-            self._client
-        )
+        # Top-level attributes are aliases of `self.v1.*` (same objects),
+        # kept for backward compatibility.
+        self.user: AsyncUserOperations = self.v1.user
+        self.meeting: AsyncMeetingOperations = self.v1.meeting
+        self.todo: AsyncTodoOperations = self.v1.todo
+        self.goal: AsyncGoalOperations = self.v1.goal
+        self.headline: AsyncHeadlineOperations = self.v1.headline
+        self.issue: AsyncIssueOperations = self.v1.issue
+        self.scorecard: AsyncScorecardOperations = self.v1.scorecard
 
     async def __aenter__(self) -> Self:
         """Enter the async context manager.
